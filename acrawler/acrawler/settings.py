@@ -45,6 +45,9 @@ COOKIES_ENABLED = False
 TELNETCONSOLE_ENABLED = True
 
 
+SCHEDULER = 'acrawler.scheduler.Scheduler'
+
+
 # Enable and configure HTTP caching (disabled by default)
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
 import sys
