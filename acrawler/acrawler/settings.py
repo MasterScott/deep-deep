@@ -30,6 +30,8 @@ REACTOR_THREADPOOL_MAXSIZE = 10
 
 RETRY_ENABLED = False
 AJAXCRAWL_ENABLED = True
+DOWNLOAD_WARNSIZE = 2*1024*1024
+DOWNLOAD_MAXSIZE = 4*1024*1024
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See http://doc.scrapy.org/en/latest/topics/autothrottle.html
@@ -74,9 +76,9 @@ HTTPCACHE_GZIP = False
 
 # Enable or disable downloader middlewares
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
-#DOWNLOADER_MIDDLEWARES = {
-#    'acrawler.middlewares.MyCustomDownloaderMiddleware': 543,
-#}
+DOWNLOADER_MIDDLEWARES = {
+   'acrawler.middlewares.OffsiteDownloaderMiddleware': 543,
+}
 
 # Enable or disable extensions
 # See http://scrapy.readthedocs.org/en/latest/topics/extensions.html

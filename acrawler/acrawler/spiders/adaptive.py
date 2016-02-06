@@ -11,11 +11,13 @@ we're working with a crawl tree.
 """
 
 import itertools
-import logging
+import time
 import random
 
+from twisted.internet.task import LoopingCall
 import networkx as nx
 import scrapy
+from scrapy.exceptions import CloseSpider
 
 from acrawler.spiders.base import BaseSpider
 from acrawler.classifiers import page_scores
@@ -32,6 +34,7 @@ class AdaptiveSpider(BaseSpider):
     name = 'adaptive'
 
     custom_settings = {
+        'DEPTH_LIMIT': 3,
         'DEPTH_PRIORITY': 1,
         # 'CONCURRENT_REQUESTS':
     }
@@ -42,8 +45,19 @@ class AdaptiveSpider(BaseSpider):
         self.G = nx.DiGraph(name='Crawl Graph')
         self.node_ids = itertools.count()
         self.seen_urls = set()
+        self.response_count = 0
+
+        self.log_task = LoopingCall(self.print_stats)
+        self.log_task.start(10)
+        self.checkpoint_task = LoopingCall(self.checkpoint)
+        self.checkpoint_task.start(60*10)
 
     def parse(self, response):
+        self.response_count += 1
+        max_items = self.crawler.settings.getint('CLOSESPIDER_ITEMCOUNT') or float('inf')
+        if self.response_count >= max_items:
+            raise CloseSpider("item_count")
+
         node_id = self.update_response_node(response)
 
         if not self.G.node[node_id]['ok']:
@@ -101,7 +115,7 @@ class AdaptiveSpider(BaseSpider):
                 url=url,
                 visited=False,
                 ok=None,
-                scores={},  # TODO: estimate scores
+                scores=None,  # TODO: estimate scores
             )
             self.G.add_edge(this_node_id, node_id, link=link)
 
@@ -131,9 +145,27 @@ class AdaptiveSpider(BaseSpider):
 
             yield link
 
-    def closed(self, reason):
-        """ Save crawl graph to a file when spider is closed """
+    def print_stats(self):
+        msg = "Crawl graph: {} nodes ({} visited), {} edges".format(
+            self.G.number_of_nodes(),
+            self.response_count,
+            self.G.number_of_edges(),
+        )
+        self.logger.info(msg)
+
+    def checkpoint(self):
+        ts = int(time.time())
+        name = 'crawl-{}.pickle.gz'.format(ts)
+        self.save_crawl_graph(name)
+
+    def save_crawl_graph(self, name):
         self.logger.info("Saving crawl graph...",)
-        nx.write_gpickle(self.G, 'crawl.pickle.gz')
+        nx.write_gpickle(self.G, name)
         self.logger.info("Crawl graph saved")
 
+    def closed(self, reason):
+        """ Save crawl graph to a file when spider is closed """
+        for task in [self.log_task, self.checkpoint_task]:
+            if task.running:
+                task.stop()
+        self.save_crawl_graph('crawl.pickle.gz')
