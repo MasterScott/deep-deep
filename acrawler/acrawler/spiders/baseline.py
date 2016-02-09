@@ -12,7 +12,7 @@ from acrawler.utils import (
 from formasaurus.utils import get_domain
 
 from acrawler.spiders.base import BaseSpider
-from acrawler.classifiers import forms_info
+from acrawler.score_pages import forms_info
 from acrawler.utils import decreasing_priority_iter
 
 

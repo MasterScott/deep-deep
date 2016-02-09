@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
+import os
 import itertools
+from urllib.parse import unquote_plus
+from urllib.parse import urlsplit
+
 from formasaurus.utils import get_domain
 
 
@@ -36,3 +40,19 @@ def decreasing_priority_iter(N=5):
     for idx in itertools.count():
         priority = - (idx // N)
         yield priority
+
+
+def url_path_query(url):
+    """
+    Return URL path and query, without domain, scheme and fragment:
+
+    >>> url_path_query("http://example.com/foo/bar?k=v&egg=spam#id9")
+    '/foo/bar?k=v&egg=spam'
+    """
+    p = urlsplit(url)
+    return unquote_plus(p.path + '?' + p.query).lower()
+
+
+def ensure_folder_exists(path):
+    """ Create folder `path` if necessary """
+    os.makedirs(path, exist_ok=True)

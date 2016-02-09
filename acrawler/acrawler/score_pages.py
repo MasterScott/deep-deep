@@ -2,7 +2,7 @@
 import hashlib
 
 import formasaurus
-from formasaurus import formhash
+from formasaurus import formhash, classifiers
 from acrawler.utils import aggregate_max
 
 
@@ -24,3 +24,7 @@ def page_scores(response):
     """ Return aggregate form scores for a page """
     return aggregate_max([f['form'] for f in forms_info(response)])
 
+
+def available_form_types():
+    """ Return a list of all possible form types """
+    return list(classifiers.get_instance().form_classes)

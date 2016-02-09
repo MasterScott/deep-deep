@@ -13,7 +13,7 @@ class OffsiteDownloaderMiddleware:
     as specified in request.meta['domain'].
     """
     def process_request(self, request, spider):
-        if 'domain' not in request.meta:
+        if not request.meta.get('domain'):
             return
 
         domain = request.meta['domain']

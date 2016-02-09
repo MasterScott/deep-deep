@@ -8,7 +8,12 @@ dist
 .ipynb_checkpoints
 htmlcov
 .coverage
-.joblib
+*.joblib
 .cache
 docs/_build
 .scrapy
+*.pickle.gz
+*.jl
+*.csv
+*.prof
+acrawler/checkpoints/

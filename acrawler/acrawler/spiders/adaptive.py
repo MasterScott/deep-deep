@@ -11,6 +11,7 @@ we're working with a crawl tree.
 """
 
 import itertools
+import os
 import time
 import random
 
@@ -18,16 +19,19 @@ from twisted.internet.task import LoopingCall
 import networkx as nx
 import scrapy
 from scrapy.exceptions import CloseSpider
+from sklearn.externals import joblib
+from formasaurus.utils import get_domain
 
 from acrawler.spiders.base import BaseSpider
-from acrawler.classifiers import page_scores
 from acrawler.utils import (
     get_response_domain,
     set_request_domain,
-    decreasing_priority_iter)
+    decreasing_priority_iter,
+    ensure_folder_exists,
+)
 from acrawler.links import extract_link_dicts
-from formasaurus.utils import get_domain
-
+from acrawler import score_links
+from acrawler.score_pages import page_scores, available_form_types
 
 
 class AdaptiveSpider(BaseSpider):
@@ -48,9 +52,17 @@ class AdaptiveSpider(BaseSpider):
         self.response_count = 0
 
         self.log_task = LoopingCall(self.print_stats)
-        self.log_task.start(10)
+        self.log_task.start(10, now=False)
         self.checkpoint_task = LoopingCall(self.checkpoint)
-        self.checkpoint_task.start(60*10)
+        self.checkpoint_task.start(60*10, now=False)
+
+        self.link_vectorizer = score_links.get_vectorizer(use_hashing=True)
+        self.link_classifiers = {
+            # FIXME: hardcoded 10.0 constant for all form types
+            form_cls: score_links.get_classifier(positive_weight=10.0)
+            for form_cls in available_form_types()
+        }
+        ensure_folder_exists(self._data_path(''))
 
     def parse(self, response):
         self.response_count += 1
@@ -63,7 +75,12 @@ class AdaptiveSpider(BaseSpider):
         if not self.G.node[node_id]['ok']:
             return  # don't send requests from failed responses
 
+        self.update_classifiers(node_id)
+
         yield from self.generate_out_nodes(response, node_id)
+
+        # TODO:
+        # self.update_classifiers_bootstrapped(node_id)
 
     def update_response_node(self, response):
         """
@@ -105,7 +122,9 @@ class AdaptiveSpider(BaseSpider):
         links = list(self.iter_link_dicts(response, domain))
         random.shuffle(links)
 
-        for priority, link in zip(decreasing_priority_iter(), links):
+        link_scores = self.get_link_scores(links)
+
+        for priority, link, scores in zip(decreasing_priority_iter(), links, link_scores):
             url = link['url']
 
             # generate nodes and edges
@@ -115,7 +134,7 @@ class AdaptiveSpider(BaseSpider):
                 url=url,
                 visited=False,
                 ok=None,
-                scores=None,  # TODO: estimate scores
+                scores=scores,
             )
             self.G.add_edge(this_node_id, node_id, link=link)
 
@@ -126,6 +145,45 @@ class AdaptiveSpider(BaseSpider):
             }, priority=priority)
             set_request_domain(request, domain)
             yield request
+
+    def update_classifiers(self, node_id):
+        """ Update classifiers based on information received at node_id """
+        node = self.G.node[node_id]
+        assert node['visited']
+
+        # We got scores for this node_id; it means we can use incoming links
+        # as training data.
+        X_raw = []
+        for prev_id in self.G.predecessors_iter(node_id):
+            link_dict = self.G.edge[prev_id][node_id]['link']
+            X_raw.append(link_dict)
+
+        if not X_raw:
+            return
+
+        X = self.link_vectorizer.transform(X_raw)
+
+        for form_type, clf in self.link_classifiers.items():
+            y = [node['scores'].get(form_type, 0.0) >= 0.5] * len(X_raw)
+            clf.partial_fit(X, y, classes=[False, True])
+
+    def update_classifiers_bootstrapped(self, node_id):
+        """ Update classifiers based on outgoing link scores """
+        # TODO
+        raise NotImplementedError()
+
+    def get_link_scores(self, links):
+        if not links:
+            return []
+        X = self.link_vectorizer.transform(links)
+        scores = [{} for _ in links]
+        for form_type, clf in self.link_classifiers.items():
+            if clf.coef_ is None:
+                continue  # not fitted yet
+            probs = clf.predict_proba(X)[..., 1]
+            for prob, score_dict in zip(probs, scores):
+                score_dict[form_type] = prob
+        return scores
 
     def iter_link_dicts(self, response, limit_domain):
         for link in extract_link_dicts(response):
@@ -155,17 +213,32 @@ class AdaptiveSpider(BaseSpider):
 
     def checkpoint(self):
         ts = int(time.time())
-        name = 'crawl-{}.pickle.gz'.format(ts)
-        self.save_crawl_graph(name)
+        graph_filename = 'crawl-{}.pickle.gz'.format(ts)
+        clf_filename = 'classifiers-{}.joblib'.format(ts)
+        self.save_crawl_graph(graph_filename)
+        self.save_classifiers(clf_filename)
 
-    def save_crawl_graph(self, name):
-        self.logger.info("Saving crawl graph...",)
-        nx.write_gpickle(self.G, name)
+    def save_crawl_graph(self, path):
+        self.logger.info("Saving crawl graph...")
+        nx.write_gpickle(self.G, self._data_path(path))
         self.logger.info("Crawl graph saved")
+
+    def save_classifiers(self, path):
+        self.logger.info("Saving classifiers...")
+        pipe = {
+            'vec': self.link_vectorizer,
+            'clf': self.link_classifiers,
+        }
+        joblib.dump(pipe, self._data_path(path), compress=3)
+        self.logger.info("Classifiers saved")
+
+    def _data_path(self, path):
+        return os.path.join('./checkpoints', path)
 
     def closed(self, reason):
         """ Save crawl graph to a file when spider is closed """
         for task in [self.log_task, self.checkpoint_task]:
             if task.running:
                 task.stop()
+        self.save_classifiers('classifiers.joblib')
         self.save_crawl_graph('crawl.pickle.gz')
