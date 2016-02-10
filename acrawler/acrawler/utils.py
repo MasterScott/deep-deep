@@ -23,7 +23,6 @@ def aggregate_max(dicts):
     return res
 
 
-
 def get_response_domain(response):
     return response.meta.get('domain', get_domain(response.url))
 

@@ -20,6 +20,7 @@ from twisted.internet.task import LoopingCall
 import networkx as nx
 import scrapy
 from scrapy.exceptions import CloseSpider
+from scrapy.utils.response import get_base_url
 from sklearn.externals import joblib
 from formasaurus.utils import get_domain
 
@@ -97,11 +98,10 @@ class AdaptiveSpider(BaseSpider):
             node_id = next(self.node_ids)
 
         # 2. Update node with observed information
+        observed_scores = None
         ok = response.status == 200 and hasattr(response, 'text')
         if ok:
             observed_scores = page_scores(response)
-        else:
-            observed_scores = None
 
         self.G.add_node(
             node_id,
@@ -109,6 +109,7 @@ class AdaptiveSpider(BaseSpider):
             visited=True,
             ok=ok,
             scores=observed_scores,
+            response_id=self.response_count,
         )
         return node_id
 
@@ -137,7 +138,9 @@ class AdaptiveSpider(BaseSpider):
                 url=url,
                 visited=False,
                 ok=None,
-                scores=scores,
+                scores=None,
+                response_id=None,
+                predicted_scores=scores,
             )
             self.G.add_edge(this_node_id, node_id, link=link)
 
@@ -189,7 +192,8 @@ class AdaptiveSpider(BaseSpider):
         return scores
 
     def iter_link_dicts(self, response, limit_domain):
-        for link in extract_link_dicts(response):
+        base_url = get_base_url(response)
+        for link in extract_link_dicts(response.selector, base_url):
             url = link['url']
 
             # only follow in-domain URLs

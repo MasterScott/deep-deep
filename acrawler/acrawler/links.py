@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
+from urllib.parse import urljoin
+
 from scrapy.linkextractors import IGNORED_EXTENSIONS
 from scrapy.utils.url import url_has_any_extension
 
@@ -22,7 +24,7 @@ def extract_js_link(href):
         return m.group('url')
 
 
-def extract_link_dicts(response):
+def extract_link_dicts(selector, base_url):
     """
     Extract dicts with link information::
 
@@ -36,10 +38,9 @@ def extract_link_dicts(response):
         'before_text': '<text preceeding this link>',
     }
     """
-    sel = response.selector
-    sel.remove_namespaces()
+    selector.remove_namespaces()
 
-    for a in sel.xpath('//a'):
+    for a in selector.xpath('//a'):
         link = {}
 
         attrs = a.root.attrib
@@ -55,7 +56,7 @@ def extract_link_dicts(response):
             href = js_link
             link['js'] = True
 
-        url = response.urljoin(href)
+        url = urljoin(base_url, href)
         if url_has_any_extension(url, IGNORED_EXTENSIONS):
             continue
 
