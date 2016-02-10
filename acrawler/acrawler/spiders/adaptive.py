@@ -14,6 +14,7 @@ import itertools
 import os
 import time
 import random
+import datetime
 
 from twisted.internet.task import LoopingCall
 import networkx as nx
@@ -36,12 +37,13 @@ from acrawler.score_pages import page_scores, available_form_types
 
 class AdaptiveSpider(BaseSpider):
     name = 'adaptive'
-
     custom_settings = {
         'DEPTH_LIMIT': 3,
         'DEPTH_PRIORITY': 1,
         # 'CONCURRENT_REQUESTS':
     }
+
+    crawl_id = str(datetime.datetime.now())
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,6 +65,7 @@ class AdaptiveSpider(BaseSpider):
             for form_cls in available_form_types()
         }
         ensure_folder_exists(self._data_path(''))
+        self.logger.info("Crawl {} started".format(self.crawl_id))
 
     def parse(self, response):
         self.response_count += 1
@@ -233,7 +236,7 @@ class AdaptiveSpider(BaseSpider):
         self.logger.info("Classifiers saved")
 
     def _data_path(self, path):
-        return os.path.join('./checkpoints', path)
+        return os.path.join('checkpoints', self.crawl_id, path)
 
     def closed(self, reason):
         """ Save crawl graph to a file when spider is closed """
