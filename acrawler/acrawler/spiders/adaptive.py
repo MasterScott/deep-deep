@@ -14,6 +14,7 @@ import itertools
 import os
 import time
 import random
+import collections
 import datetime
 
 from twisted.internet.task import LoopingCall
@@ -36,6 +37,42 @@ from acrawler import score_links
 from acrawler.score_pages import page_scores, available_form_types
 
 
+class MaxScores:
+    """
+    >>> s = MaxScores(['x', 'y'])
+    >>> s.update("foo", {"x": 0.1, "y": 0.3})
+    >>> s.update("foo", {"x": 0.01, "y": 0.4})
+    >>> s.update("bar", {"x": 0.8})
+    >>> s.sum() == {'x': 0.9, 'y': 0.4}
+    True
+    >>> s.avg() == {'x': 0.45, 'y': 0.2}
+    True
+    """
+    def __init__(self, classes):
+        self.classes = classes
+        self._zero_scores = {form_type: 0.0 for form_type in self.classes}
+        self.scores = collections.defaultdict(lambda: self._zero_scores.copy())
+
+    def update(self, domain, scores):
+        cur_scores = self.scores[domain]
+        for k, v in scores.items():
+            cur_scores[k] = max(cur_scores[k], v)
+
+    def sum(self):
+        return {
+            k: sum(v[k] for v in self.scores.values())
+            for k in self.classes
+        }
+
+    def avg(self):
+        if not self.scores:
+            return self._zero_scores.copy()
+        return {k: v/len(self.scores) for k, v in self.sum().items()}
+
+    def __len__(self):
+        return len(self.scores)
+
+
 class AdaptiveSpider(BaseSpider):
     name = 'adaptive'
     custom_settings = {
@@ -53,6 +90,7 @@ class AdaptiveSpider(BaseSpider):
         self.node_ids = itertools.count()
         self.seen_urls = set()
         self.response_count = 0
+        self.domain_scores = MaxScores(available_form_types())
 
         self.log_task = LoopingCall(self.print_stats)
         self.log_task.start(10, now=False)
@@ -79,6 +117,7 @@ class AdaptiveSpider(BaseSpider):
         if not self.G.node[node_id]['ok']:
             return  # don't send requests from failed responses
 
+        self.update_domain_scores(response, node_id)
         self.update_classifiers(node_id)
 
         yield from self.generate_out_nodes(response, node_id)
@@ -112,6 +151,13 @@ class AdaptiveSpider(BaseSpider):
             response_id=self.response_count,
         )
         return node_id
+
+    def update_domain_scores(self, response, node_id):
+        domain = get_response_domain(response)
+        scores = self.G.node[node_id]['scores']
+        if not scores:
+            return
+        self.domain_scores.update(domain, scores)
 
     def generate_out_nodes(self, response, this_node_id):
         """
@@ -211,12 +257,22 @@ class AdaptiveSpider(BaseSpider):
             yield link
 
     def print_stats(self):
-        msg = "Crawl graph: {} nodes ({} visited), {} edges".format(
+        msg = "Crawl graph: {} nodes ({} visited), {} edges, {} domains".format(
             self.G.number_of_nodes(),
             self.response_count,
             self.G.number_of_edges(),
+            len(self.domain_scores)
         )
         self.logger.info(msg)
+
+        scores_sum = sorted(self.domain_scores.sum().items())
+        scores_avg = sorted(self.domain_scores.avg().items())
+        reward_lines = [
+            "{:8.1f}   {:0.4f}   {}".format(tot, avg, k)
+            for ((k, tot), (k, avg)) in zip(scores_sum, scores_avg)
+        ]
+        msg = '\n'.join(reward_lines)
+        self.logger.info("Reward (total / average): \n{}".format(msg))
 
     def checkpoint(self):
         ts = int(time.time())
