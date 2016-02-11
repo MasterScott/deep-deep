@@ -284,6 +284,8 @@ class AdaptiveSpider(BaseSpider):
             yield link
 
     def print_stats(self):
+        active_downloads = len(self.crawler.engine.downloader.active)
+        self.logger.info("Active downloads: {}".format(active_downloads))
         msg = "Crawl graph: {} nodes ({} visited), {} edges, {} domains".format(
             self.G.number_of_nodes(),
             self.response_count,
