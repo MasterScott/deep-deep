@@ -19,11 +19,11 @@ import datetime
 
 from twisted.internet.task import LoopingCall
 import networkx as nx
+from sklearn.externals import joblib
+from formasaurus.utils import get_domain
 import scrapy
 from scrapy.exceptions import CloseSpider
 from scrapy.utils.response import get_base_url
-from sklearn.externals import joblib
-from formasaurus.utils import get_domain
 
 from acrawler.spiders.base import BaseSpider
 from acrawler.utils import (
@@ -35,6 +35,7 @@ from acrawler.utils import (
 from acrawler.links import extract_link_dicts
 from acrawler import score_links
 from acrawler.score_pages import page_scores, available_form_types
+from acrawler.middlewares import offdomain_request_dropped
 
 
 class MaxScores:
@@ -47,6 +48,8 @@ class MaxScores:
     True
     >>> s.avg() == {'x': 0.45, 'y': 0.2}
     True
+    >>> len(s)
+    2
     """
     def __init__(self, classes):
         self.classes = classes
@@ -106,6 +109,11 @@ class AdaptiveSpider(BaseSpider):
         ensure_folder_exists(self._data_path(''))
         self.logger.info("Crawl {} started".format(self.crawl_id))
 
+    def start_requests(self):
+        self.crawler.signals.connect(self._on_offdomain_request_dropped,
+                                     offdomain_request_dropped)
+        return super().start_requests()
+
     def parse(self, response):
         self.response_count += 1
         max_items = self.crawler.settings.getint('CLOSESPIDER_ITEMCOUNT') or float('inf')
@@ -114,11 +122,11 @@ class AdaptiveSpider(BaseSpider):
 
         node_id = self.update_response_node(response)
 
-        if not self.G.node[node_id]['ok']:
-            return  # don't send requests from failed responses
-
         self.update_domain_scores(response, node_id)
         self.update_classifiers(node_id)
+
+        if not self.G.node[node_id]['ok']:
+            return  # don't send requests from failed responses
 
         yield from self.generate_out_nodes(response, node_id)
 
@@ -137,10 +145,11 @@ class AdaptiveSpider(BaseSpider):
             node_id = next(self.node_ids)
 
         # 2. Update node with observed information
-        observed_scores = None
         ok = response.status == 200 and hasattr(response, 'text')
         if ok:
             observed_scores = page_scores(response)
+        else:
+            observed_scores = self._zero_scores()
 
         self.G.add_node(
             node_id,
@@ -151,6 +160,24 @@ class AdaptiveSpider(BaseSpider):
             response_id=self.response_count,
         )
         return node_id
+
+    def _on_offdomain_request_dropped(self, request):
+        self.response_count += 1
+        node_id = request.meta.get('node_id')
+        if not node_id:
+            self.logger.warn("Request without node_id dropped: {}".format(request))
+            return
+
+        self.G.add_node(
+            node_id,
+            visited=True,
+            ok=False,
+            scores=self._zero_scores(),
+            response_id=self.response_count,
+        )
+
+    def _zero_scores(self):
+        return {tp: 0.0 for tp in available_form_types()}
 
     def update_domain_scores(self, response, node_id):
         domain = get_response_domain(response)
