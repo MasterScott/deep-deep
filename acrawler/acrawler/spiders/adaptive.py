@@ -17,8 +17,9 @@ import random
 import collections
 import datetime
 
-from twisted.internet.task import LoopingCall
+import numpy as np
 import networkx as nx
+from twisted.internet.task import LoopingCall
 from sklearn.externals import joblib
 from formasaurus.utils import get_domain
 import scrapy
@@ -34,7 +35,11 @@ from acrawler.utils import (
 )
 from acrawler.links import extract_link_dicts
 from acrawler import score_links
-from acrawler.score_pages import page_scores, available_form_types
+from acrawler.score_pages import (
+    page_scores,
+    available_form_types,
+    get_constant_scores
+)
 from acrawler.middlewares import offdomain_request_dropped
 
 
@@ -85,6 +90,7 @@ class AdaptiveSpider(BaseSpider):
     }
 
     crawl_id = str(datetime.datetime.now())
+    G = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -149,7 +155,7 @@ class AdaptiveSpider(BaseSpider):
         if ok:
             observed_scores = page_scores(response)
         else:
-            observed_scores = self._zero_scores()
+            observed_scores = get_constant_scores(0.0)
 
         self.G.add_node(
             node_id,
@@ -172,12 +178,9 @@ class AdaptiveSpider(BaseSpider):
             node_id,
             visited=True,
             ok=False,
-            scores=self._zero_scores(),
+            scores=get_constant_scores(0.0),
             response_id=self.response_count,
         )
-
-    def _zero_scores(self):
-        return {tp: 0.0 for tp in available_form_types()}
 
     def update_domain_scores(self, response, node_id):
         domain = get_response_domain(response)
@@ -185,6 +188,11 @@ class AdaptiveSpider(BaseSpider):
         if not scores:
             return
         self.domain_scores.update(domain, scores)
+        self._scheduler.queue.update_observed_scores(response, scores)
+
+    @property
+    def _scheduler(self):
+        return self.crawler.engine.slot.scheduler
 
     def generate_out_nodes(self, response, this_node_id):
         """
@@ -201,7 +209,7 @@ class AdaptiveSpider(BaseSpider):
 
         link_scores = self.get_link_scores(links)
 
-        for priority, link, scores in zip(decreasing_priority_iter(), links, link_scores):
+        for link, scores in zip(links, link_scores):
             url = link['url']
 
             # generate nodes and edges
@@ -221,7 +229,7 @@ class AdaptiveSpider(BaseSpider):
             request = scrapy.Request(url, meta={
                 'handle_httpstatus_list': [403, 404, 500],
                 'node_id': node_id,
-            }, priority=priority)
+            }, priority=0)
             set_request_domain(request, domain)
             yield request
 
@@ -252,25 +260,31 @@ class AdaptiveSpider(BaseSpider):
         raise NotImplementedError()
 
     def get_link_scores(self, links):
+        """ Classify links and return a list of their score dicts """
         if not links:
             return []
         X = self.link_vectorizer.transform(links)
         scores = [{} for _ in links]
         for form_type, clf in self.link_classifiers.items():
             if clf.coef_ is None:
-                continue  # not fitted yet
-            probs = clf.predict_proba(X)[..., 1]
+                # Not fitted yet; assign uniform probabilities.
+                # TODO: investigate optimistic initialization to help
+                # with initial exploration?
+                probs = [0.5] * len(links)
+            else:
+                probs = clf.predict_proba(X)[..., 1]
+
             for prob, score_dict in zip(probs, scores):
                 score_dict[form_type] = prob
         return scores
 
-    def iter_link_dicts(self, response, limit_domain):
+    def iter_link_dicts(self, response, domain):
         base_url = get_base_url(response)
         for link in extract_link_dicts(response.selector, base_url):
             url = link['url']
 
             # only follow in-domain URLs
-            if get_domain(url) != limit_domain:
+            if get_domain(url) != domain:
                 continue
 
             # Filter out duplicate URLs.
@@ -304,6 +318,10 @@ class AdaptiveSpider(BaseSpider):
         self.logger.info("Reward (total / average): \n{}".format(msg))
 
     def checkpoint(self):
+        """
+        Save current crawl state, which can be analyzed while
+        the crawl is still going.
+        """
         ts = int(time.time())
         graph_filename = 'crawl-{}.pickle.gz'.format(ts)
         clf_filename = 'classifiers-{}.joblib'.format(ts)
