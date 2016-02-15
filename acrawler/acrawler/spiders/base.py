@@ -5,7 +5,10 @@ import logging
 import random
 
 import scrapy
+from scrapy.exceptions import CloseSpider
 from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
+
+from acrawler.middlewares import offdomain_request_dropped
 
 
 class SeedsSpider(scrapy.Spider):
@@ -35,8 +38,8 @@ class SeedsSpider(scrapy.Spider):
 
 
 class BaseSpider(SeedsSpider):
-
     random_seed = 0
+    response_count = 0
 
     def start_requests(self):
 
@@ -49,4 +52,25 @@ class BaseSpider(SeedsSpider):
         # see https://github.com/scrapy/scrapy/issues/1308
         logging.getLogger("scrapy.spidermiddlewares.depth").setLevel(logging.INFO)
 
+        # increase response count on filtered out requests
+        self.crawler.signals.connect(self.on_offdomain_request_dropped,
+                                     offdomain_request_dropped)
+
         return super().start_requests()
+
+    def increase_response_count(self):
+        """
+        Call this method to increase response count and close spider
+        if it is over a limit.
+
+        This provides a more flexible alternative to default
+        CloseSpider extension.
+        """
+        self.response_count += 1
+        max_items = self.crawler.settings.getint('CLOSESPIDER_ITEMCOUNT',
+                                                 float('inf'))
+        if self.response_count >= max_items:
+            raise CloseSpider("item_count")
+
+    def on_offdomain_request_dropped(self, request):
+        self.increase_response_count()

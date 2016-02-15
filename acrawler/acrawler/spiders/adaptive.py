@@ -23,7 +23,6 @@ from twisted.internet.task import LoopingCall
 from sklearn.externals import joblib
 from formasaurus.utils import get_domain
 import scrapy
-from scrapy.exceptions import CloseSpider
 from scrapy.utils.response import get_base_url
 
 from acrawler.spiders.base import BaseSpider
@@ -40,7 +39,6 @@ from acrawler.score_pages import (
     available_form_types,
     get_constant_scores
 )
-from acrawler.middlewares import offdomain_request_dropped
 
 
 class MaxScores:
@@ -98,7 +96,6 @@ class AdaptiveSpider(BaseSpider):
         self.G = nx.DiGraph(name='Crawl Graph')
         self.node_ids = itertools.count()
         self.seen_urls = set()
-        self.response_count = 0
         self.domain_scores = MaxScores(available_form_types())
 
         self.log_task = LoopingCall(self.print_stats)
@@ -115,16 +112,8 @@ class AdaptiveSpider(BaseSpider):
         ensure_folder_exists(self._data_path(''))
         self.logger.info("Crawl {} started".format(self.crawl_id))
 
-    def start_requests(self):
-        self.crawler.signals.connect(self._on_offdomain_request_dropped,
-                                     offdomain_request_dropped)
-        return super().start_requests()
-
     def parse(self, response):
-        self.response_count += 1
-        max_items = self.crawler.settings.getint('CLOSESPIDER_ITEMCOUNT') or float('inf')
-        if self.response_count >= max_items:
-            raise CloseSpider("item_count")
+        self.increase_response_count()
 
         node_id = self.update_response_node(response)
 
@@ -167,8 +156,9 @@ class AdaptiveSpider(BaseSpider):
         )
         return node_id
 
-    def _on_offdomain_request_dropped(self, request):
-        self.response_count += 1
+    def on_offdomain_request_dropped(self, request):
+        super().on_offdomain_request_dropped(request)
+
         node_id = request.meta.get('node_id')
         if not node_id:
             self.logger.warn("Request without node_id dropped: {}".format(request))

@@ -41,6 +41,8 @@ class CrawlAllSpider(BaseSpider):
         self.extract_links = LinkExtractor().extract_links
 
     def parse(self, response):
+        self.increase_response_count()
+
         if not hasattr(response, 'text'):
             # can't decode the response
             return
