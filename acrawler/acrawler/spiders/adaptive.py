@@ -17,13 +17,10 @@ import random
 import collections
 import datetime
 
-import numpy as np
 import networkx as nx
 from twisted.internet.task import LoopingCall
 from sklearn.externals import joblib
-from formasaurus.utils import get_domain
 import scrapy
-from scrapy.utils.response import get_base_url
 
 from acrawler.spiders.base import BaseSpider
 from acrawler.utils import (
@@ -31,12 +28,11 @@ from acrawler.utils import (
     set_request_domain,
     ensure_folder_exists,
 )
-from acrawler.links import extract_link_dicts
 from acrawler import score_links
 from acrawler.score_pages import (
-    page_scores,
     available_form_types,
-    get_constant_scores
+    get_constant_scores,
+    response_max_scores,
 )
 
 
@@ -114,7 +110,7 @@ class AdaptiveSpider(BaseSpider):
         # 2. Update node with observed information
         ok = response.status == 200 and hasattr(response, 'text')
         if ok:
-            observed_scores = page_scores(response)
+            observed_scores = response_max_scores(response)
         else:
             observed_scores = get_constant_scores(0.0)
 

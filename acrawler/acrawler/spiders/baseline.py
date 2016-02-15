@@ -13,7 +13,7 @@ from acrawler.utils import (
     decreasing_priority_iter,
 )
 from acrawler.spiders.base import BaseSpider
-from acrawler.score_pages import forms_info
+from acrawler.score_pages import forms_info, max_scores
 from acrawler.links import extract_link_dicts
 
 
@@ -53,6 +53,7 @@ class CrawlAllSpider(BaseSpider):
             'url': response.url,
             'depth': response.meta['depth'],
             'forms': res,
+            'scores': max_scores(res),
             'domain': get_response_domain(response),
         }
 

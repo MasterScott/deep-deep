@@ -20,9 +20,14 @@ def forms_info(response):
     return [info for form, info in res]
 
 
-def page_scores(response):
+def max_scores(page_forms_info):
     """ Return aggregate form scores for a page """
-    return dict_aggregate_max(*[f['form'] for f in forms_info(response)])
+    return dict_aggregate_max(*[f['form'] for f in page_forms_info])
+
+
+def response_max_scores(response):
+    """ Return aggregate form scores for a page """
+    return max_scores(forms_info(response))
 
 
 def available_form_types():
