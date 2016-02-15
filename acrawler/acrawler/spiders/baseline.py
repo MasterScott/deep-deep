@@ -14,6 +14,7 @@ from acrawler.utils import (
 )
 from acrawler.spiders.base import BaseSpider
 from acrawler.score_pages import forms_info
+from acrawler.links import extract_link_dicts
 
 
 class CrawlAllSpider(BaseSpider):

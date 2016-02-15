@@ -256,10 +256,15 @@ class Scheduler:
 
     def open(self, spider):
         self.spider = spider
-        self.queue = BalancedPriorityQueue(
-            form_types=available_form_types(),
-            G=spider.G,
-        )
+        if hasattr(spider, 'G'):
+            # hack hack hack: if a spider uses crawl graph
+            # it is assumed to want BalancedPriorityQueue
+            self.queue = BalancedPriorityQueue(
+                form_types=available_form_types(),
+                G=spider.G,
+            )
+        else:
+            self.queue = RequestsPriorityQueue(fifo=True)
         return self.dupefilter.open()
 
     def close(self, reason):
