@@ -216,6 +216,23 @@ class BalancedPriorityQueue:
             return
         self.queues[domain].update_observed_scores(observed_scores)
 
+    def iter_active_requests(self):
+        """ Return an iterator over all requests in a queue """
+        for q in self.queues.values():
+            for entry in q.entries:
+                yield entry[2]
+
+    def iter_active_node_ids(self):
+        """ Return an iterator over node ids of all queued requests """
+        for req in self.iter_active_requests():
+            node_id = req.meta.get('node_id')
+            if node_id:
+                yield node_id
+
+    def recalculate_priorities(self):
+        for q in self.queues.values():
+            q.recalculate_priorities()
+
 
 class Scheduler:
     def __init__(self, dupefilter, stats):
