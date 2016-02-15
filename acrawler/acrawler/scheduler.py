@@ -94,6 +94,7 @@ FLOAT_PRIORITY_MULTIPLIER = 10000
 
 
 def get_request_predicted_scores(request, G):
+    """ Return stored predicted scores for a request """
     node_id = request.meta.get('node_id')
     if node_id is None:
         return
@@ -162,6 +163,15 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
             self.change_priority(entry, self.compute_priority(request))
         self.heapify()
 
+    def pop(self):
+        req = super().pop()
+        if req:
+            scores = get_request_predicted_scores(req, self.G)
+            if scores:
+                scores = {k: int(v * 100) for k, v in scores.items()}
+            print(req.priority, scores, req.url)
+        return req
+
     def __repr__(self):
         return "DomainRequestQueue({}; #requests={}, weight={})".format(
             self.domain, len(self), self.weight
@@ -198,12 +208,6 @@ class BalancedPriorityQueue:
         queue = self.queues[np.random.choice(domains, p=p)]
         # print(queue, dict(zip(domains, p)))
         req = queue.pop()
-        if req:
-            scores = get_request_predicted_scores(req, self.G)
-            if scores:
-                scores = {k: int(v*100) for k, v in scores.items()}
-            print(req.priority, scores, req.url)
-
         return req
 
     def update_observed_scores(self, response, observed_scores):
