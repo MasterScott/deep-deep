@@ -138,8 +138,13 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
         new_max = dict_aggregate_max(self.max_observed_scores,
                                      observed_page_scores)
         if new_max != self.max_observed_scores:
+            scores_diff = {
+                k: v
+                for k, v in dict_subtract(new_max, self.max_observed_scores).items()
+                if v
+            }
             print("Max scores updated for {}. Diff: {}".format(
-                self.domain, dict_subtract(new_max, self.max_observed_scores)
+                self.domain, scores_diff
             ))
             self.max_observed_scores = new_max
             self.recalculate_priorities()
