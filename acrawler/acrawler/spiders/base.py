@@ -6,8 +6,11 @@ import random
 
 import scrapy
 from scrapy.exceptions import CloseSpider
+from scrapy.utils.response import get_base_url
 from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
+from formasaurus.utils import get_domain
 
+from acrawler.links import extract_link_dicts
 from acrawler.middlewares import offdomain_request_dropped
 
 
@@ -42,6 +45,7 @@ class BaseSpider(SeedsSpider):
     response_count = 0
 
     def start_requests(self):
+        self.seen_urls = set()
 
         # crawer can randomize links to select; make crawl deterministic
         # FIXME: it doesn't make crawl deterministic because
@@ -71,6 +75,29 @@ class BaseSpider(SeedsSpider):
                                                  float('inf'))
         if self.response_count >= max_items:
             raise CloseSpider("item_count")
+
+    def iter_link_dicts(self, response, domain=None):
+        """
+        Extract links from the response.
+        """
+        base_url = get_base_url(response)
+        for link in extract_link_dicts(response.selector, base_url):
+            url = link['url']
+
+            # only follow in-domain URLs
+            if domain is not None and get_domain(url) != domain:
+                continue
+
+            # Filter out duplicate URLs.
+            # Requests are also filtered out in Scheduler by dupefilter.
+            # Here we filter them to avoid creating unnecessary nodes
+            # and edges.
+            # FIXME: use canonical URLs?
+            if url in self.seen_urls:
+                continue
+            self.seen_urls.add(url)
+
+            yield link
 
     def on_offdomain_request_dropped(self, request):
         self.increase_response_count()

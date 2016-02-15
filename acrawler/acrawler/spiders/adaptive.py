@@ -29,7 +29,6 @@ from acrawler.spiders.base import BaseSpider
 from acrawler.utils import (
     get_response_domain,
     set_request_domain,
-    decreasing_priority_iter,
     ensure_folder_exists,
 )
 from acrawler.links import extract_link_dicts
@@ -39,44 +38,6 @@ from acrawler.score_pages import (
     available_form_types,
     get_constant_scores
 )
-
-
-class MaxScores:
-    """
-    >>> s = MaxScores(['x', 'y'])
-    >>> s.update("foo", {"x": 0.1, "y": 0.3})
-    >>> s.update("foo", {"x": 0.01, "y": 0.4})
-    >>> s.update("bar", {"x": 0.8})
-    >>> s.sum() == {'x': 0.9, 'y': 0.4}
-    True
-    >>> s.avg() == {'x': 0.45, 'y': 0.2}
-    True
-    >>> len(s)
-    2
-    """
-    def __init__(self, classes):
-        self.classes = classes
-        self._zero_scores = {form_type: 0.0 for form_type in self.classes}
-        self.scores = collections.defaultdict(lambda: self._zero_scores.copy())
-
-    def update(self, domain, scores):
-        cur_scores = self.scores[domain]
-        for k, v in scores.items():
-            cur_scores[k] = max(cur_scores[k], v)
-
-    def sum(self):
-        return {
-            k: sum(v[k] for v in self.scores.values())
-            for k in self.classes
-        }
-
-    def avg(self):
-        if not self.scores:
-            return self._zero_scores.copy()
-        return {k: v/len(self.scores) for k, v in self.sum().items()}
-
-    def __len__(self):
-        return len(self.scores)
 
 
 class AdaptiveSpider(BaseSpider):
@@ -189,11 +150,11 @@ class AdaptiveSpider(BaseSpider):
         if not scores:
             return
         self.domain_scores.update(domain, scores)
-        self._scheduler.queue.update_observed_scores(response, scores)
+        self.scheduler_queue.update_observed_scores(response, scores)
 
     @property
-    def _scheduler(self):
-        return self.crawler.engine.slot.scheduler
+    def scheduler_queue(self):
+        return self.crawler.engine.slot.scheduler.queue
 
     def recalculate_link_scores(self):
         """ Update scores of all links in a frontier """
@@ -214,7 +175,7 @@ class AdaptiveSpider(BaseSpider):
         self.logger.info("Re-classifying links: prepare...")
         links = []
         update_node_ids = []
-        for node_id in self._scheduler.queue.iter_active_node_ids():
+        for node_id in self.scheduler_queue.iter_active_node_ids():
             for prev_id in self.G.predecessors_iter(node_id):
                 links.append(self.G.edge[prev_id][node_id]['link'])
                 update_node_ids.append(node_id)
@@ -229,7 +190,7 @@ class AdaptiveSpider(BaseSpider):
             self.G.add_node(node_id, predicted_scores=scores)
 
         self.logger.info("Re-classifying links: updating queues...")
-        self._scheduler.queue.recalculate_priorities()
+        self.scheduler_queue.recalculate_priorities()
         self.logger.info("Re-classifying links: done")
         self._scores_recalculated_at = self.response_count
 
@@ -317,25 +278,6 @@ class AdaptiveSpider(BaseSpider):
                 score_dict[form_type] = prob
         return scores
 
-    def iter_link_dicts(self, response, domain):
-        base_url = get_base_url(response)
-        for link in extract_link_dicts(response.selector, base_url):
-            url = link['url']
-
-            # only follow in-domain URLs
-            if get_domain(url) != domain:
-                continue
-
-            # Filter out duplicate URLs.
-            # Requests are also filtered out in Scheduler by dupefilter.
-            # Here we filter them to avoid creating unnecessary nodes
-            # and edges.
-            if url in self.seen_urls:
-                continue
-            self.seen_urls.add(url)
-
-            yield link
-
     def print_stats(self):
         active_downloads = len(self.crawler.engine.downloader.active)
         self.logger.info("Active downloads: {}".format(active_downloads))
@@ -391,3 +333,41 @@ class AdaptiveSpider(BaseSpider):
                 task.stop()
         self.save_classifiers('classifiers.joblib')
         self.save_crawl_graph('crawl.pickle.gz')
+
+
+class MaxScores:
+    """
+    >>> s = MaxScores(['x', 'y'])
+    >>> s.update("foo", {"x": 0.1, "y": 0.3})
+    >>> s.update("foo", {"x": 0.01, "y": 0.4})
+    >>> s.update("bar", {"x": 0.8})
+    >>> s.sum() == {'x': 0.9, 'y': 0.4}
+    True
+    >>> s.avg() == {'x': 0.45, 'y': 0.2}
+    True
+    >>> len(s)
+    2
+    """
+    def __init__(self, classes):
+        self.classes = classes
+        self._zero_scores = {form_type: 0.0 for form_type in self.classes}
+        self.scores = collections.defaultdict(lambda: self._zero_scores.copy())
+
+    def update(self, domain, scores):
+        cur_scores = self.scores[domain]
+        for k, v in scores.items():
+            cur_scores[k] = max(cur_scores[k], v)
+
+    def sum(self):
+        return {
+            k: sum(v[k] for v in self.scores.values())
+            for k in self.classes
+        }
+
+    def avg(self):
+        if not self.scores:
+            return self._zero_scores.copy()
+        return {k: v/len(self.scores) for k, v in self.sum().items()}
+
+    def __len__(self):
+        return len(self.scores)

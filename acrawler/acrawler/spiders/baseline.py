@@ -72,8 +72,7 @@ class CrawlAllSpider(BaseSpider):
 
         # limit crawl to the first domain
         domain = get_response_domain(response)
-        urls = [url for url in self.extract_urls(response)
-                if get_domain(url) == domain]
+        urls = [link['url'] for link in self.iter_link_dicts(response, domain)]
 
         if shuffle:
             random.shuffle(urls)
@@ -88,7 +87,3 @@ class CrawlAllSpider(BaseSpider):
             req = scrapy.Request(url, priority=priority)
             set_request_domain(req, domain)
             yield req
-
-    def extract_urls(self, response):
-        links = extract_link_dicts(response.selector, get_base_url(response))
-        return [link['url'] for link in links]
