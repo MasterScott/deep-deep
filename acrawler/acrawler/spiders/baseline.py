@@ -4,16 +4,16 @@ import random
 from urllib.parse import urlsplit
 
 import scrapy
-from scrapy.linkextractors import LinkExtractor
+from scrapy.utils.response import get_base_url
+from formasaurus.utils import get_domain
+
 from acrawler.utils import (
     get_response_domain,
     set_request_domain,
+    decreasing_priority_iter,
 )
-from formasaurus.utils import get_domain
-
 from acrawler.spiders.base import BaseSpider
 from acrawler.score_pages import forms_info
-from acrawler.utils import decreasing_priority_iter
 
 
 class CrawlAllSpider(BaseSpider):
@@ -38,7 +38,6 @@ class CrawlAllSpider(BaseSpider):
         self.heuristic_re = re.compile("(regi|join|create|sign|account|user|login)")
         self.heuristic = int(self.heuristic)
         self.shuffle = int(self.shuffle)
-        self.extract_links = LinkExtractor().extract_links
 
     def parse(self, response):
         self.increase_response_count()
@@ -72,8 +71,8 @@ class CrawlAllSpider(BaseSpider):
 
         # limit crawl to the first domain
         domain = get_response_domain(response)
-        urls = [link.url for link in self.extract_links(response)
-                if get_domain(link.url) == domain]
+        urls = [url for url in self.extract_urls(response)
+                if get_domain(url) == domain]
 
         if shuffle:
             random.shuffle(urls)
@@ -88,3 +87,7 @@ class CrawlAllSpider(BaseSpider):
             req = scrapy.Request(url, priority=priority)
             set_request_domain(req, domain)
             yield req
+
+    def extract_urls(self, response):
+        links = extract_link_dicts(response.selector, get_base_url(response))
+        return [link['url'] for link in links]
