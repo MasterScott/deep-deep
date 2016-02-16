@@ -324,7 +324,12 @@ class AdaptiveSpider(BaseSpider):
 
     def closed(self, reason):
         """ Save crawl graph to a file when spider is closed """
-        for task in [self.log_task, self.checkpoint_task]:
+        tasks = [
+            self.log_task,
+            self.checkpoint_task,
+            self.update_link_scores_task
+        ]
+        for task in tasks:
             if task.running:
                 task.stop()
         self.save_classifiers('classifiers.joblib')
