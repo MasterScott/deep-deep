@@ -55,7 +55,7 @@ SCHEDULER = 'acrawler.scheduler.Scheduler'
 import sys
 
 HTTPCACHE_ENABLED = True
-HTTPCACHE_EXPIRATION_SECS = 60*60*24*7
+HTTPCACHE_EXPIRATION_SECS = 60*60*24*30
 HTTPCACHE_DIR = 'httpcache-%s' % sys.version_info[0]
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
