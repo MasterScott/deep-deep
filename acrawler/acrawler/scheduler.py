@@ -233,6 +233,9 @@ class BalancedPriorityQueue:
         for q in self.queues.values():
             q.recalculate_priorities()
 
+    def __len__(self):
+        return sum(len(q) for q in self.queues.values())
+
 
 class Scheduler:
     def __init__(self, dupefilter, stats):
