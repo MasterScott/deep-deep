@@ -57,7 +57,7 @@ def extract_link_dicts(selector, base_url):
             link['js'] = True
 
         url = urljoin(base_url, href)
-        if url_has_any_extension(url, IGNORED_EXTENSIONS):
+        if url_has_any_extension(url, _IGNORED):
             continue
 
         link['url'] = url
