@@ -39,8 +39,8 @@ from acrawler.score_pages import (
 class AdaptiveSpider(BaseSpider):
     name = 'adaptive'
     custom_settings = {
-        'DEPTH_LIMIT': 3,
-        'DEPTH_PRIORITY': 1,
+        'DEPTH_LIMIT': 5,
+        # 'DEPTH_PRIORITY': 1,
         # 'CONCURRENT_REQUESTS':
     }
 
