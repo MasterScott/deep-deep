@@ -23,8 +23,8 @@ ROBOTSTXT_OBEY = True
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 CONCURRENT_REQUESTS = 48
 
-# limit crawl to 50K successful pages
-CLOSESPIDER_ITEMCOUNT = 50000
+# limit crawl to 10K successful pages
+CLOSESPIDER_ITEMCOUNT = 10000
 
 REACTOR_THREADPOOL_MAXSIZE = 10
 
