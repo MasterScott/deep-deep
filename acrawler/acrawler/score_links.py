@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from formasaurus.utils import get_domain
 from sklearn.feature_extraction.text import HashingVectorizer, CountVectorizer
 from sklearn.linear_model import SGDClassifier
 from sklearn.pipeline import FeatureUnion, Pipeline
@@ -67,7 +68,7 @@ def get_classifier(positive_weight):
     )
 
 
-def get_vectorizer(use_hashing):
+def get_vectorizer(use_hashing, use_domain):
     cls = HashingVectorizer if use_hashing else CountVectorizer
 
     # link url
@@ -86,12 +87,20 @@ def get_vectorizer(use_hashing):
         ngram_range=(1,2),
     )
 
-    vec = FeatureUnion([
+    features = [
         ('url', vec_url),
         ('text', vec_text),
-    ])
+    ]
 
-    return vec
+    if use_domain:
+        vec_domain = cls(
+            preprocessor=_link_domain,
+            analyzer='word',
+            binary=True,
+        )
+        features.append(('domain', vec_domain))
+
+    return FeatureUnion(features)
 
 
 def _link_url(link):
@@ -102,6 +111,10 @@ def _link_inside_text(link):
     text = link.get('inside_text', '')
     title = link['attrs'].get('title', '')
     return normalize(text + ' ' + title)
+
+
+def _link_domain(link):
+    return get_domain(link['url'])
 
 
 def _link_before_text(link):
