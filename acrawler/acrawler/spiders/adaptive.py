@@ -2,6 +2,9 @@
 """
 Adaptive crawling algorithm.
 
+It works by training a link classifier at the same time crawl is happening.
+This classifer is then used to direct crawler to more promising links.
+
 The first assumption is that all links to the same page are similar
 if they are from the same domain. Because crawler works in-domain
 it means we don't have to turn off dupefilter, and that there is no
@@ -37,6 +40,19 @@ from acrawler.score_pages import (
 
 
 class AdaptiveSpider(BaseSpider):
+    """
+    Adaptive spider. It crawls a a list of URLs using adaptive algorithm
+    and stores the results to ./checkpoints folder.
+
+    Example::
+
+        scrapy crawl adaptive -a seeds_url=./urls.csv -L INFO
+
+    With domain name as a feature::
+
+        scrapy crawl adaptive -a seeds_url=./urls.csv -a fit_domain_inercept=1 -L INFO
+
+    """
     name = 'adaptive'
     custom_settings = {
         'DEPTH_LIMIT': 5,

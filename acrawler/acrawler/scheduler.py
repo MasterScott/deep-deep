@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """
+Scheduling
+==========
+
 There are several conflicting goals which scheduler needs to acheive.
 It should:
 
@@ -8,6 +11,53 @@ It should:
 3. allow less promising links to be crawled with some probability
    (ε-greedy policy);
 4. allow to update link priorities dynamically.
+
+For each domain there is a priority queue for requests.
+To select next link crawler first chooses a domain, then chooses
+a link for this domain. It allows to crawl all domains and prioritise
+more promising requests.
+
+Choosing links to follow for a domain
+-------------------------------------
+
+Request priorities are calculated based on link rewards.
+
+Reward is a difference between current max score for a task (for a form type)
+and expected max score for a task (for a form type). For example, if max
+probability of a search form on any of the pages from this domain so far
+was 0.2, and there is a link which leads to a search form with
+probability 0.8, the reward for this link is 0.8-0.2=0.6.
+
+Request priority is computed as a maximum of all expected rewards for this
+request.
+
+The approach above has a few pathological cases:
+
+1. Links scores are probabilities of finding a form of a given class
+   on a target page. But we don't know for sure if there is indeed a form
+   of a given class on a target page even when we observed the target page:
+   form classifier is probabilistic. Currently link scores are defined as
+   ``P( target_score > 0.5 | link)``. It means that they are biased.
+   For example, if target score is always 0.6, link score will be pushed
+   to 1.0, and an expected reward will be always positive (0.4).
+   Optimal model would assign zero reward in this case, i.e. link scores should
+   predict target scores, not solve a binary classification problem.
+
+2. If some kind of forms is common and many links lead to these forms
+   then link scores would be high for this kind of forms for most links.
+   This is a problem if some domain doesn't have these forms at all.
+   Example: let's say 80% of websites have search forms on each page.
+   So classifier learned to assign each link 0.8 score on average.
+   If a domain doesn't have a search form then the reward for most links
+   will be a high number of 0.8, and so crawler can spend most time trying
+   to find a search form instead of trying to solve other tasks.
+
+Choosing domain to crawl
+------------------------
+
+For each domain crawler maintains a score - max expected reward.
+Next domain to crawl is selected randomly, with a probability proportional
+to this score - more promising domain is, more often it is selected.
 
 """
 import heapq
