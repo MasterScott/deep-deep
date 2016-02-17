@@ -8,64 +8,27 @@ from formasaurus.text import normalize
 from acrawler.utils import url_path_query
 
 
-# class PartialFitPipeline(Pipeline):
-#     """
-#     A Pipeline which supports partial_fit with stateless transformers.
-#     """
-#
-#     def partial_fit(self, X, y=None, **fit_transform_params):
-#         """Call all the transforms one after the other to transform the
-#         data, then call partial_fit for the final estimator.
-#
-#         Parameters
-#         ----------
-#         X : iterable
-#             Training data. Must fulfill input requirements of first step of the
-#             pipeline.
-#         y : iterable, default=None
-#             Training targets. Must fulfill label requirements for all steps of
-#             the pipeline.
-#         """
-#
-#         # prepare
-#         params_steps = {step: {} for step, _ in self.steps}
-#         for pname, pval in fit_transform_params.items():
-#             step, param = pname.split('__', 1)
-#             params_steps[step][param] = pval
-#
-#         # transform
-#         Xt = X
-#         for name, transform in self.steps[:-1]:
-#             Xt = transform.transform(Xt, y, **params_steps[name])
-#
-#         # fit
-#         fit_params = params_steps[self.steps[-1][0]]
-#         self.steps[-1][-1].partial_fit(Xt, y, **fit_params)
-#         return self
-#
-#
-#
-# def get_model(positive_weight=10.0, use_hashing=True):
-#     vec = get_vectorizer(use_hashing=use_hashing)
-#     clf = get_classifier(positive_weight=positive_weight)
-#     return Pipeline([
-#         ('vec', vec),
-#         ('clf', clf)
-#     ])
-
-
-def get_classifier(positive_weight):
-    return SGDClassifier(
+def get_classifier(positive_weight, converge):
+    params = dict(
         loss='log',
         penalty='elasticnet',
         alpha=1e-6,
         n_iter=1,
         shuffle=False,
-        learning_rate='constant',
-        eta0=1e-1,
         average=True,
         class_weight={False: 1.0, True: positive_weight},
     )
+    if converge:
+        params.update(
+            learning_rate='optimal',
+        )
+    else:
+        params.update(
+            learning_rate='constant',
+            eta0=1e-1,
+        )
+
+    return SGDClassifier(**params)
 
 
 def get_vectorizer(use_hashing, use_domain):
