@@ -186,7 +186,7 @@ class AdaptiveSpider(BaseSpider):
         self.logger.info("Re-classifying links: classifying {} links...".format(
             len(links))
         )
-        link_scores = self.get_link_scores(links)
+        link_scores = self.get_link_scores(links, verbose=True)
 
         self.logger.info("Re-classifying links: updating crawl graph...")
         for node_id, scores in zip(update_node_ids, link_scores):
@@ -262,11 +262,15 @@ class AdaptiveSpider(BaseSpider):
         # TODO
         raise NotImplementedError()
 
-    def get_link_scores(self, links):
+    def get_link_scores(self, links, verbose=False):
         """ Classify links and return a list of their score dicts """
         if not links:
             return []
+        if verbose:
+            self.logger.info("get_link_scores: vectorizing...")
         X = self.link_vectorizer.transform(links)
+        if verbose:
+            self.logger.info("get_link_scores: classifying...")
         scores = [{} for _ in links]
         for form_type, clf in self.link_classifiers.items():
             if clf.coef_ is None:
