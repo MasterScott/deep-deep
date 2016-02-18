@@ -301,15 +301,19 @@ class BalancedPriorityQueue:
         domains = list(self.queues.keys())
         if not domains:
             return
-        weights = [self.queues[domain].weight for domain in domains]
-        p = softmax(weights, t=FLOAT_PRIORITY_MULTIPLIER)
-        queue = self.queues[np.random.choice(domains, p=p)]
-        # print(queue, dict(zip(domains, p)))
-        if self.eps and random.random() < self.eps:
+
+        random_policy = self.eps and random.random() < self.eps
+        if random_policy:
             print("ε", end=' ')
-            req = queue.pop_random()
+
+        if random_policy:
+            queue = self.queues[random.choice(domains)]
         else:
-            req = queue.pop()
+            weights = [self.queues[domain].weight for domain in domains]
+            p = softmax(weights, t=FLOAT_PRIORITY_MULTIPLIER)
+            queue = self.queues[np.random.choice(domains, p=p)]
+        # print(queue, dict(zip(domains, p)))
+        req = queue.pop_random() if random_policy else queue.pop()
         return req
 
     def update_observed_scores(self, response, observed_scores):
