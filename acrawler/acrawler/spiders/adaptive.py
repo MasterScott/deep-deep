@@ -88,7 +88,7 @@ class AdaptiveSpider(BaseSpider):
         self.G = nx.DiGraph(name='Crawl Graph')
         self.node_ids = itertools.count()
         self.seen_urls = set()
-        self.visited_node_ids = set()
+        self._replay_node_ids = set()
         self._scores_recalculated_at = 0
         self.domain_scores = MaxScores(available_form_types())
 
@@ -138,7 +138,8 @@ class AdaptiveSpider(BaseSpider):
         node_id = response.meta.get('node_id')
 
         # 1. Handle seed responses which don't yet have node_id
-        if node_id is None:
+        is_seed_url = node_id is None
+        if is_seed_url:
             node_id = next(self.node_ids)
 
         # 2. Update node with observed information
@@ -156,7 +157,12 @@ class AdaptiveSpider(BaseSpider):
             scores=observed_scores,
             response_id=self.response_count,
         )
-        self.visited_node_ids.add(node_id)
+
+        if not is_seed_url:
+            # don't add initial nodes to replay because there is
+            # no incoming links for such nodes
+            self._replay_node_ids.add(node_id)
+
         return node_id
 
     def on_offdomain_request_dropped(self, request):
@@ -174,7 +180,7 @@ class AdaptiveSpider(BaseSpider):
             scores=get_constant_scores(0.0),
             response_id=self.response_count,
         )
-        self.visited_node_ids.add(node_id)
+        self._replay_node_ids.add(node_id)
 
     def update_domain_scores(self, response, node_id):
         domain = get_response_domain(response)
@@ -283,8 +289,8 @@ class AdaptiveSpider(BaseSpider):
             y_all[form_type] = self._get_y(node_id, form_type) * len(X_raw)
 
         # Experience replay: select N random training examples from the past.
-        if self.replay_N and self.replay_N > len(self.visited_node_ids):
-            past_node_ids = random.sample(self.visited_node_ids, self.replay_N)
+        if self.replay_N and self.replay_N < len(self._replay_node_ids):
+            past_node_ids = random.sample(self._replay_node_ids, self.replay_N)
             for _id in past_node_ids:
                 _x = list(self._iter_incoming_link_dicts(_id))
                 if not _x:
