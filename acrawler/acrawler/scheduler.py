@@ -62,6 +62,7 @@ to this score - more promising domain is, more often it is selected.
 """
 import heapq
 import itertools
+import random
 
 import numpy as np
 # from twisted.internet.task import LoopingCall
@@ -90,6 +91,10 @@ class RequestsPriorityQueue:
     3. call queue.heapify()
 
     """
+
+    REMOVED = object()
+    _REMOVED_PRIORITY = 1000000
+
     def __init__(self, fifo=True):
         self.entries = []
         step = 1 if fifo else -1
@@ -102,11 +107,11 @@ class RequestsPriorityQueue:
         return entry
 
     def pop(self):
-        if not self.entries:
-            return None
-            # raise KeyError("queue is empty")
-        priority, count, request = heapq.heappop(self.entries)
-        return request
+        while self.entries:
+            priority, count, request = heapq.heappop(self.entries)
+            if request is not self.REMOVED:
+                return request
+        # raise KeyError('pop from an empty priority queue')
 
     @classmethod
     def change_priority(cls, entry, new_priority):
@@ -119,7 +124,34 @@ class RequestsPriorityQueue:
         :meth:`heapify`.
         """
         entry[0] = -new_priority
-        entry[2].priority = new_priority
+        if entry[2] is not cls.REMOVED:
+            entry[2].priority = new_priority
+
+    def remove_entry(self, entry):
+        """
+        Mark an existing entry as removed.
+        ``entry`` is an item from :attr:`entries` attribute.
+        """
+        request = entry[2]
+        entry[2] = self.REMOVED
+        # move removed entry to the top at next heapify call
+        max_prio = 0 if not self.entries else -self.entries[0][0]
+        entry[0] = - (max_prio + self._REMOVED_PRIORITY)
+        return request
+
+    def pop_random(self, n_attempts=10):
+        """ Pop random entry from a queue """
+        self._pop_empty()
+        if not self.entries:
+            return
+
+        # Because we've called _pop_empty it is guaranteed there is at least
+        # one non-removed entry in a queue (the one at the top).
+        for i in range(n_attempts):
+            entry = random.choice(self.entries)
+            if entry[2] is not self.REMOVED:
+                request = self.remove_entry(entry)
+                return request
 
     @classmethod
     def get_priority(cls, entry):
@@ -127,6 +159,12 @@ class RequestsPriorityQueue:
 
     def heapify(self):
         heapq.heapify(self.entries)
+        self._pop_empty()
+
+    def _pop_empty(self):
+        """ Pop all removed entries from heap top """
+        while self.entries and self.entries[0][2] is self.REMOVED:
+            heapq.heappop(self.entries)
 
     # def iter_requests(self):
     #     """

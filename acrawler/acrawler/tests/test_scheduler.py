@@ -25,3 +25,21 @@ def test_request_priority_queue():
     assert q.pop().url == "http://example.com/0"
     assert q.pop().url == "http://example.com/-1"
     assert len(q) == 0
+
+
+def test_rpq_pop_random():
+    requests = [
+        scrapy.Request('http://example.com/1', priority=1),
+        scrapy.Request('http://example.com/2', priority=2),
+        scrapy.Request('http://example.com/3', priority=3),
+    ]
+    q = RequestsPriorityQueue(fifo=True)
+    for req in requests:
+        q.push(req)
+
+    req1 = q.pop_random()
+    req2 = q.pop_random()
+    req3 = q.pop_random()
+
+    assert {req1.url, req2.url, req3.url} == {r.url for r in requests}
+    assert q.pop_random() is None
