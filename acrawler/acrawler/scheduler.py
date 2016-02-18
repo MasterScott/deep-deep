@@ -166,13 +166,13 @@ class RequestsPriorityQueue:
         while self.entries and self.entries[0][2] is self.REMOVED:
             heapq.heappop(self.entries)
 
-    # def iter_requests(self):
-    #     """
-    #     Return all Request objects in a queue.
-    #     The first request is guaranteed to have top priority;
-    #     order of other requests is arbitrary.
-    #     """
-    #     return (e[2] for e in self.entries)
+    def iter_requests(self):
+        """
+        Return all Request objects in a queue.
+        The first request is guaranteed to have top priority;
+        order of other requests is arbitrary.
+        """
+        return (e[2] for e in self.entries if e[2] != self.REMOVED)
 
     def __len__(self):
         return len(self.entries)
@@ -248,17 +248,26 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
         """
         for entry in self.entries:
             request = entry[2]
-            self.change_priority(entry, self.compute_priority(request))
+            if request is not self.REMOVED:
+                self.change_priority(entry, self.compute_priority(request))
         self.heapify()
 
     def pop(self):
         req = super().pop()
+        self._print_req(req)
+        return req
+
+    def pop_random(self, n_attempts=10):
+        req = super().pop_random(n_attempts)
+        self._print_req(req)
+        return req
+
+    def _print_req(self, req):
         if req:
             scores = get_request_predicted_scores(req, self.G)
             if scores:
                 scores = {k: int(v * 100) for k, v in scores.items()}
             print(req.priority, scores, req.url)
-        return req
 
     def __repr__(self):
         return "DomainRequestQueue({}; #requests={}, weight={})".format(
@@ -268,10 +277,11 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
 
 class BalancedPriorityQueue:
     """ This queue samples other queues randomly, based on their weights """
-    def __init__(self, form_types, G):
+    def __init__(self, form_types, G, eps=0.0):
         self.G = G
         self.form_types = form_types
         self.queues = {}  # domain -> queue
+        self.eps = eps
 
         # self.gc_task = LoopingCall(self._gc)
         # self.gc_task.start(60, now=False)
@@ -295,7 +305,11 @@ class BalancedPriorityQueue:
         p = softmax(weights, t=FLOAT_PRIORITY_MULTIPLIER)
         queue = self.queues[np.random.choice(domains, p=p)]
         # print(queue, dict(zip(domains, p)))
-        req = queue.pop()
+        if self.eps and random.random() < self.eps:
+            print("ε", end=' ')
+            req = queue.pop_random()
+        else:
+            req = queue.pop()
         return req
 
     def update_observed_scores(self, response, observed_scores):
@@ -307,8 +321,7 @@ class BalancedPriorityQueue:
     def iter_active_requests(self):
         """ Return an iterator over all requests in a queue """
         for q in self.queues.values():
-            for entry in q.entries:
-                yield entry[2]
+            yield from q.iter_requests()
 
     def iter_active_node_ids(self):
         """ Return an iterator over node ids of all queued requests """
@@ -353,6 +366,7 @@ class Scheduler:
             self.queue = BalancedPriorityQueue(
                 form_types=available_form_types(),
                 G=spider.G,
+                eps=spider.epsilon,
             )
         else:
             self.queue = RequestsPriorityQueue(fifo=True)

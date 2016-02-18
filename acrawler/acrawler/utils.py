@@ -75,6 +75,8 @@ def ensure_folder_exists(path):
 
 def softmax(z, t=1.0):
     """
+    Softmax function with temperature.
+
     >>> softmax(np.zeros(4))
     array([ 0.25,  0.25,  0.25,  0.25])
     >>> softmax([])
