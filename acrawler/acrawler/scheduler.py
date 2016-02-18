@@ -227,13 +227,18 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
         new_max = dict_aggregate_max(self.max_observed_scores,
                                      observed_page_scores)
         if new_max != self.max_observed_scores:
-            scores_diff = {
-                k: v
-                for k, v in dict_subtract(new_max, self.max_observed_scores).items()
-                if v
-            }
-            print("Max scores updated for {}. Diff: {}".format(
-                self.domain, scores_diff
+            scores_diff = sorted([
+                (v, tp)
+                for tp, v in dict_subtract(new_max, self.max_observed_scores).items()
+                if v > 0.01
+            ], reverse=True)
+
+            scores_diff_repr = ", ".join([
+                "{} +{:0.2f}".format(tp, v)
+                for v, tp in scores_diff
+            ])
+            print("======== Max scores updated for {}: {}".format(
+                self.domain, scores_diff_repr
             ))
             self.max_observed_scores = new_max
             self.recalculate_priorities()
@@ -265,9 +270,14 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
     def _print_req(self, req):
         if req:
             scores = get_request_predicted_scores(req, self.G)
+            link_tp = '?'
+            scores_repr = None
             if scores:
-                scores = {k: int(v * 100) for k, v in scores.items()}
-            print(req.priority, scores, req.url)
+                # scores = {k: v for k, v in scores.items()}
+                rewards = dict_subtract(scores, self.max_observed_scores)
+                link_tp = sorted(rewards.items(), key=lambda kv: -kv[1])[0][0]
+                scores_repr = {k: int(v*100) for k,v in scores.items()}
+            print(req.priority, scores_repr or scores, req.url, link_tp.upper())
 
     def __repr__(self):
         return "DomainRequestQueue({}; #requests={}, weight={})".format(

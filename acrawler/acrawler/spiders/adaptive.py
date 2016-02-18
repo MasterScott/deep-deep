@@ -85,6 +85,10 @@ class AdaptiveSpider(BaseSpider):
         self.replay_N = int(self.replay_N)
         self.epsilon = float(self.epsilon)
 
+        self.logger.info("CRAWL {}: fit_domain_intercept={}, converge={}, replay_N={}, eps={}".format(
+            self.crawl_id, self.fit_domain_intercept, self.converge, self.replay_N, self.epsilon
+        ))
+
         self.G = nx.DiGraph(name='Crawl Graph')
         self.node_ids = itertools.count()
         self.seen_urls = set()
@@ -361,6 +365,7 @@ class AdaptiveSpider(BaseSpider):
         ]
         msg = '\n'.join(reward_lines)
         self.logger.info("Reward (total / average): \n{}".format(msg))
+        self.logger.info("Total reward: {}".format(sum(s for k, s in scores_sum)))
 
     def checkpoint(self):
         """
