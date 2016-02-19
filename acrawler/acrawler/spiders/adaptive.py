@@ -14,6 +14,7 @@ we're working with a crawl tree.
 """
 
 import itertools
+import json
 import os
 import time
 import random
@@ -88,9 +89,17 @@ class AdaptiveSpider(BaseSpider):
         self.epsilon = float(self.epsilon)
         self.positive_weight = float(self.positive_weight)
 
-        self.logger.info("CRAWL {}: fit_domain_intercept={}, converge={}, replay_N={}, eps={}".format(
-            self.crawl_id, self.fit_domain_intercept, self.converge, self.replay_N, self.epsilon
-        ))
+        self.params = {
+            'crawl_id': self.crawl_id,
+            'fit_domain_intercept': self.fit_domain_intercept,
+            'converge': self.converge,
+            'replay_N': self.replay_N,
+            'epsilon': self.epsilon,
+            'positive_weight': self.positive_weight,
+            'custom_settings': self.custom_settings,
+        }
+
+        self.logger.info("CRAWL {}".format(self.params))
 
         self.G = nx.DiGraph(name='Crawl Graph')
         self.node_ids = itertools.count()
@@ -118,6 +127,9 @@ class AdaptiveSpider(BaseSpider):
             for form_cls in available_form_types()
         }
         ensure_folder_exists(self._data_path(''))
+        with open(self._data_path('info.json'), 'w') as f:
+            json.dump(self.params, f)
+
         self.logger.info("Crawl {} started".format(self.crawl_id))
 
     def parse(self, response):
