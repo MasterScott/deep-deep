@@ -66,6 +66,8 @@ class AdaptiveSpider(BaseSpider):
     replay_N = 0  # how many links to take for experience replay
     epsilon = 0  # probability of choosing a random link instead of
                  # the the most promising
+    positive_weight = 20  # how much more impact positive cases make
+                          # FIXME: hardcoded constant for all form types
 
     # intervals for periodic tasks
     stats_interval = 10
@@ -84,6 +86,7 @@ class AdaptiveSpider(BaseSpider):
         self.converge = bool(int(self.converge))
         self.replay_N = int(self.replay_N)
         self.epsilon = float(self.epsilon)
+        self.positive_weight = float(self.positive_weight)
 
         self.logger.info("CRAWL {}: fit_domain_intercept={}, converge={}, replay_N={}, eps={}".format(
             self.crawl_id, self.fit_domain_intercept, self.converge, self.replay_N, self.epsilon
@@ -108,9 +111,8 @@ class AdaptiveSpider(BaseSpider):
             use_domain=self.fit_domain_intercept,
         )
         self.link_classifiers = {
-            # FIXME: hardcoded 20.0 constant for all form types
             form_cls: score_links.get_classifier(
-                positive_weight=20.0,
+                positive_weight=self.positive_weight,
                 converge=self.converge,
             )
             for form_cls in available_form_types()
