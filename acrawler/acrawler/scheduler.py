@@ -43,6 +43,10 @@ The approach above has a few pathological cases:
    Optimal model would assign zero reward in this case, i.e. link scores should
    predict target scores, not solve a binary classification problem.
 
+   To tackle this, rewards are computed for adjusted scores: if score > 0.5
+   it is set to 1.0, otherwise it is set to 0.0. A better approach would be
+   to use cross-entropy as training objective for link classifier (TODO/FIXME).
+
 2. If some kind of forms is common and many links lead to these forms
    then link scores would be high for this kind of forms for most links.
    This is a problem if some domain doesn't have these forms at all.
@@ -193,11 +197,12 @@ def get_request_predicted_scores(request, G):
 
 
 class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
-    def __init__(self, domain, form_types, G):
+    def __init__(self, domain, form_types, G, zeroone_loss):
         super().__init__(fifo=True)
         self.domain = domain
         self.max_observed_scores = {tp: 0 for tp in form_types}
         self.G = G
+        self.zeroone_loss = zeroone_loss
 
     @property
     def weight(self):
@@ -215,17 +220,25 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
         scores = get_request_predicted_scores(request, self.G)
         if scores is None:
             if self.domain is None:
-                reward = 100  # seed URLs
+                expected_reward = 100  # seed URLs
             else:
-                reward = 0.1  # no classifier yet
+                expected_reward = 0.1  # no classifier yet
         else:
-            rewards = dict_subtract(scores, self.max_observed_scores)
-            reward = max(max(rewards.values()), 0)
-        return int(reward * FLOAT_PRIORITY_MULTIPLIER)
+            expected_rewards = dict_subtract(scores, self.max_observed_scores)
+            expected_reward = max(max(expected_rewards.values()), 0)
+        return int(expected_reward * FLOAT_PRIORITY_MULTIPLIER)
 
     def update_observed_scores(self, observed_page_scores):
-        new_max = dict_aggregate_max(self.max_observed_scores,
-                                     observed_page_scores)
+        if self.zeroone_loss:
+            # use the same loss for reward and for link classifier
+            # FIXME: it should be handled from the other side, we should
+            # train classifier with cross-entropy objective
+            observed_page_scores = {tp: 1.0 if v > 0.5 else 0.0
+                                    for tp, v in observed_page_scores.items()}
+        new_max = dict_aggregate_max(
+            self.max_observed_scores,
+            observed_page_scores
+        )
         if new_max != self.max_observed_scores:
             scores_diff = sorted([
                 (v, tp)
@@ -287,11 +300,12 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
 
 class BalancedPriorityQueue:
     """ This queue samples other queues randomly, based on their weights """
-    def __init__(self, form_types, G, eps=0.0):
+    def __init__(self, form_types, G, eps=0.0, zeroone_loss=True):
         self.G = G
         self.form_types = form_types
         self.queues = {}  # domain -> queue
         self.eps = eps
+        self.zeroone_loss = zeroone_loss
 
         # self.gc_task = LoopingCall(self._gc)
         # self.gc_task.start(60, now=False)
@@ -303,7 +317,7 @@ class BalancedPriorityQueue:
         domain = request.meta.get('domain')
         if domain not in self.queues:
             self.queues[domain] = DomainFormFinderRequestsQueue(
-                domain, self.form_types, self.G
+                domain, self.form_types, self.G, self.zeroone_loss
             )
         self.queues[domain].push(request)
 
@@ -381,6 +395,7 @@ class Scheduler:
                 form_types=available_form_types(),
                 G=spider.G,
                 eps=spider.epsilon,
+                zeroone_loss=spider.reward_zeroone_loss,
             )
         else:
             self.queue = RequestsPriorityQueue(fifo=True)

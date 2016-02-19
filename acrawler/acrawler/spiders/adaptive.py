@@ -69,6 +69,7 @@ class AdaptiveSpider(BaseSpider):
                  # the the most promising
     positive_weight = 20  # how much more impact positive cases make
                           # FIXME: hardcoded constant for all form types
+    reward_zeroone_loss = 1  # whether to use classification 1/0 loss for rewards
 
     # intervals for periodic tasks
     stats_interval = 10
@@ -88,6 +89,7 @@ class AdaptiveSpider(BaseSpider):
         self.replay_N = int(self.replay_N)
         self.epsilon = float(self.epsilon)
         self.positive_weight = float(self.positive_weight)
+        self.reward_zeroone_loss = bool(int(self.reward_zeroone_loss))
 
         self.params = {
             'crawl_id': self.crawl_id,
@@ -97,6 +99,7 @@ class AdaptiveSpider(BaseSpider):
             'epsilon': self.epsilon,
             'positive_weight': self.positive_weight,
             'custom_settings': self.custom_settings,
+            'reward_zeroone_loss': self.reward_zeroone_loss,
         }
 
         self.logger.info("CRAWL {}".format(self.params))
