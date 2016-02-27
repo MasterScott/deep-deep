@@ -122,12 +122,15 @@ class AdaptiveSpider(BaseSpider):
             use_hashing=True,
             use_domain=self.fit_domain_intercept,
         )
+
+        # hack hack
+        form_types = {tp for tp in available_form_types() if tp != 'search'}
         self.link_classifiers = {
-            form_cls: score_links.get_classifier(
+            tp: score_links.get_classifier(
                 positive_weight=self.positive_weight,
                 converge=self.converge,
             )
-            for form_cls in available_form_types()
+            for tp in form_types
         }
         ensure_folder_exists(self._data_path(''))
         with open(self._data_path('info.json'), 'w') as f:
