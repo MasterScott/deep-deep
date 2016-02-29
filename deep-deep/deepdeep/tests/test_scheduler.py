@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import scrapy
 
-from acrawler.scheduler import (
+from deepdeep.scheduler import (
     RequestsPriorityQueue,
     DomainFormFinderRequestsQueue,
 )

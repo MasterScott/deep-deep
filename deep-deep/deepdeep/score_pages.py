@@ -3,7 +3,7 @@ import hashlib
 
 import formasaurus
 from formasaurus import formhash, classifiers
-from acrawler.utils import dict_aggregate_max
+from deepdeep.utils import dict_aggregate_max
 
 
 def get_form_hash(form):

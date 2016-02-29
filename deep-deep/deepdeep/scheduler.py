@@ -71,9 +71,9 @@ import random
 import numpy as np
 # from twisted.internet.task import LoopingCall
 
-from acrawler.score_pages import available_form_types
+from deepdeep.score_pages import available_form_types
 from scrapy.utils.misc import load_object
-from acrawler.utils import (
+from deepdeep.utils import (
     dict_subtract,
     dict_aggregate_max,
     softmax,

@@ -7,14 +7,14 @@ import scrapy
 from scrapy.utils.response import get_base_url
 from formasaurus.utils import get_domain
 
-from acrawler.utils import (
+from deepdeep.utils import (
     get_response_domain,
     set_request_domain,
     decreasing_priority_iter,
 )
-from acrawler.spiders.base import BaseSpider
-from acrawler.score_pages import forms_info, max_scores
-from acrawler.links import extract_link_dicts
+from deepdeep.spiders.base import BaseSpider
+from deepdeep.score_pages import forms_info, max_scores
+from deepdeep.links import extract_link_dicts
 
 
 class CrawlAllSpider(BaseSpider):

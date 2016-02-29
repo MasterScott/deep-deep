@@ -10,8 +10,8 @@ from scrapy.utils.response import get_base_url
 from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
 from formasaurus.utils import get_domain
 
-from acrawler.links import extract_link_dicts
-from acrawler.middlewares import offdomain_request_dropped
+from deepdeep.links import extract_link_dicts
+from deepdeep.middlewares import offdomain_request_dropped
 
 
 class SeedsSpider(scrapy.Spider):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Scrapy settings for acrawler project
+# Scrapy settings for deepdeep project
 #
 # For simplicity, this file contains only settings considered important or
 # commonly used. You can find more settings consulting the documentation:
@@ -9,13 +9,13 @@
 #     http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 #     http://scrapy.readthedocs.org/en/latest/topics/spider-middleware.html
 
-BOT_NAME = 'acrawler'
+BOT_NAME = 'deepdeep'
 
-SPIDER_MODULES = ['acrawler.spiders']
-NEWSPIDER_MODULE = 'acrawler.spiders'
+SPIDER_MODULES = ['deepdeep.spiders']
+NEWSPIDER_MODULE = 'deepdeep.spiders'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-USER_AGENT = 'acrawler'
+USER_AGENT = 'deepdeep'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
@@ -47,7 +47,7 @@ COOKIES_ENABLED = False
 TELNETCONSOLE_ENABLED = True
 
 
-SCHEDULER = 'acrawler.scheduler.Scheduler'
+SCHEDULER = 'deepdeep.scheduler.Scheduler'
 
 
 # Enable and configure HTTP caching (disabled by default)
@@ -71,13 +71,13 @@ HTTPCACHE_GZIP = False
 # Enable or disable spider middlewares
 # See http://scrapy.readthedocs.org/en/latest/topics/spider-middleware.html
 #SPIDER_MIDDLEWARES = {
-#    'acrawler.middlewares.MyCustomSpiderMiddleware': 543,
+#    'deepdeep.middlewares.MyCustomSpiderMiddleware': 543,
 #}
 
 # Enable or disable downloader middlewares
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-   'acrawler.middlewares.OffsiteDownloaderMiddleware': 543,
+   'deepdeep.middlewares.OffsiteDownloaderMiddleware': 543,
 }
 
 # Enable or disable extensions
@@ -89,6 +89,6 @@ DOWNLOADER_MIDDLEWARES = {
 # Configure item pipelines
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html
 #ITEM_PIPELINES = {
-#    'acrawler.pipelines.SomePipeline': 300,
+#    'deepdeep.pipelines.SomePipeline': 300,
 #}
 

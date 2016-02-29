@@ -5,7 +5,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.pipeline import FeatureUnion, Pipeline
 from formasaurus.text import normalize
 
-from acrawler.utils import url_path_query
+from deepdeep.utils import url_path_query
 
 
 def get_classifier(positive_weight, converge):

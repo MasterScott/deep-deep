@@ -16,5 +16,5 @@ docs/_build
 *.jl
 *.csv
 *.prof
-acrawler/checkpoints/
-acrawler/acrawler/checkpoints/
+deep-deep/checkpoints/
+deep-deep/deepdeep/checkpoints/
