@@ -81,6 +81,9 @@ from acrawler.utils import (
 )
 
 
+FLOAT_PRIORITY_MULTIPLIER = 10000
+
+
 class RequestsPriorityQueue:
     """
     In-memory priority queue for requests.
@@ -97,7 +100,9 @@ class RequestsPriorityQueue:
     """
 
     REMOVED = object()
-    _REMOVED_PRIORITY = 1000000
+
+    REMOVED_PRIORITY = 1000 * FLOAT_PRIORITY_MULTIPLIER
+    EMPTY_PRIORITY = -1000 * FLOAT_PRIORITY_MULTIPLIER
 
     def __init__(self, fifo=True):
         self.entries = []
@@ -131,6 +136,20 @@ class RequestsPriorityQueue:
         if entry[2] is not cls.REMOVED:
             entry[2].priority = new_priority
 
+    def update_all_priorities(self, compute_priority_func):
+        """
+        Update all request priorities.
+
+        ``compute_priority_func`` is a function which returns
+        new priority; it should accept a Request and return an integer.
+        """
+        for entry in self.entries:
+            request = entry[2]
+            if request is not self.REMOVED:
+                priority = compute_priority_func(request)
+                self.change_priority(entry, priority)
+        self.heapify()
+
     def remove_entry(self, entry):
         """
         Mark an existing entry as removed.
@@ -140,7 +159,7 @@ class RequestsPriorityQueue:
         entry[2] = self.REMOVED
         # move removed entry to the top at next heapify call
         max_prio = 0 if not self.entries else -self.entries[0][0]
-        entry[0] = - (max_prio + self._REMOVED_PRIORITY)
+        entry[0] = - (max_prio + self.REMOVED_PRIORITY)
         return request
 
     def pop_random(self, n_attempts=10):
@@ -156,6 +175,13 @@ class RequestsPriorityQueue:
             if entry[2] is not self.REMOVED:
                 request = self.remove_entry(entry)
                 return request
+
+    def max_priority(self):
+        """ Return maximum request priority in this queue """
+        if not self.entries:
+            return self.EMPTY_PRIORITY
+        top_priority = self.get_priority(self.entries[0])
+        return top_priority
 
     @classmethod
     def get_priority(cls, entry):
@@ -182,9 +208,6 @@ class RequestsPriorityQueue:
         return len(self.entries)
 
 
-FLOAT_PRIORITY_MULTIPLIER = 10000
-
-
 def get_request_predicted_scores(request, G):
     """ Return stored predicted scores for a request """
     node_id = request.meta.get('node_id')
@@ -203,13 +226,6 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
         self.max_observed_scores = {tp: 0 for tp in form_types}
         self.G = G
         self.zeroone_loss = zeroone_loss
-
-    @property
-    def weight(self):
-        if not self.entries:
-            return -1000 * FLOAT_PRIORITY_MULTIPLIER
-        top_priority = self.get_priority(self.entries[0])
-        return top_priority
 
     def push(self, request):
         request.priority = self.compute_priority(request)
@@ -264,11 +280,7 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
         1. predicted request scores are changed, or
         2. max_scores are changed.
         """
-        for entry in self.entries:
-            request = entry[2]
-            if request is not self.REMOVED:
-                self.change_priority(entry, self.compute_priority(request))
-        self.heapify()
+        self.update_all_priorities(self.compute_priority)
 
     def pop(self):
         req = super().pop()
@@ -293,19 +305,17 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
             print(req.priority, scores_repr or scores, req.url, link_tp.upper())
 
     def __repr__(self):
-        return "DomainRequestQueue({}; #requests={}, weight={})".format(
-            self.domain, len(self), self.weight
+        return "DomainRequestQueue({}; #requests={}, max priority={})".format(
+            self.domain, len(self), self.max_priority()
         )
 
 
 class BalancedPriorityQueue:
     """ This queue samples other queues randomly, based on their weights """
-    def __init__(self, form_types, G, eps=0.0, zeroone_loss=True):
-        self.G = G
-        self.form_types = form_types
+    def __init__(self, queue_factory, eps=0.0):
         self.queues = {}  # domain -> queue
         self.eps = eps
-        self.zeroone_loss = zeroone_loss
+        self.queue_factory = queue_factory
 
         # self.gc_task = LoopingCall(self._gc)
         # self.gc_task.start(60, now=False)
@@ -316,9 +326,7 @@ class BalancedPriorityQueue:
     def push(self, request):
         domain = request.meta.get('domain')
         if domain not in self.queues:
-            self.queues[domain] = DomainFormFinderRequestsQueue(
-                domain, self.form_types, self.G, self.zeroone_loss
-            )
+            self.queues[domain] = self.queue_factory(domain)
         self.queues[domain].push(request)
 
     def pop(self):
@@ -333,7 +341,7 @@ class BalancedPriorityQueue:
         if random_policy:
             queue = self.queues[random.choice(domains)]
         else:
-            weights = [self.queues[domain].weight for domain in domains]
+            weights = [self.queues[domain].max_priority() for domain in domains]
             p = softmax(weights, t=FLOAT_PRIORITY_MULTIPLIER)
             queue = self.queues[np.random.choice(domains, p=p)]
         # print(queue, dict(zip(domains, p)))
@@ -391,11 +399,16 @@ class Scheduler:
         if hasattr(spider, 'G'):
             # hack hack hack: if a spider uses crawl graph
             # it is assumed to want BalancedPriorityQueue
+            def new_queue(domain):
+                return DomainFormFinderRequestsQueue(
+                    domain=domain,
+                    form_types=available_form_types(),
+                    G=spider.G,
+                    zeroone_loss=spider.reward_zeroone_loss
+                )
             self.queue = BalancedPriorityQueue(
-                form_types=available_form_types(),
-                G=spider.G,
+                queue_factory=new_queue,
                 eps=spider.epsilon,
-                zeroone_loss=spider.reward_zeroone_loss,
             )
         else:
             self.queue = RequestsPriorityQueue(fifo=True)
