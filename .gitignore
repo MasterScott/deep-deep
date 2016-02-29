@@ -17,3 +17,4 @@ docs/_build
 *.csv
 *.prof
 acrawler/checkpoints/
+acrawler/acrawler/checkpoints/
