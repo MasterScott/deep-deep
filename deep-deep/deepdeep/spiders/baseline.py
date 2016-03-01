@@ -4,8 +4,6 @@ import random
 from urllib.parse import urlsplit
 
 import scrapy
-from scrapy.utils.response import get_base_url
-from formasaurus.utils import get_domain
 
 from deepdeep.utils import (
     get_response_domain,
@@ -14,7 +12,6 @@ from deepdeep.utils import (
 )
 from deepdeep.spiders.base import BaseSpider
 from deepdeep.score_pages import forms_info, max_scores
-from deepdeep.links import extract_link_dicts
 
 
 class CrawlAllSpider(BaseSpider):
@@ -33,6 +30,8 @@ class CrawlAllSpider(BaseSpider):
         'DEPTH_LIMIT': 1,  # override it using -s DEPTH_LIMIT=2
         'DEPTH_PRIORITY': 1,
     }
+
+    ALLOWED_ARGUMENTS = {'shuffle', 'heuristic'} | BaseSpider.ALLOWED_ARGUMENTS
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

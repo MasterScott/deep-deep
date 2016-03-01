@@ -14,35 +14,36 @@ from deepdeep.links import extract_link_dicts
 from deepdeep.middlewares import offdomain_request_dropped
 
 
-class SeedsSpider(scrapy.Spider):
+class BaseSpider(scrapy.Spider):
     """
-    This spider parses a file at ``seeds_url`` (URL per line)
+    Base spider class witho common code.
+
+    Among other things it parses a file at ``seeds_url`` (URL per line)
     and calls parse for each URL.
     """
+
     seeds_url = None  # set it in command line
-
-    def start_requests(self):
-        if self.seeds_url is None:
-            raise ValueError("Please pass seeds_url to the spider. "
-                             "It should be a text file with urls, one per line.")
-
-        seeds_url = guess_scheme(self.seeds_url)
-
-        yield scrapy.Request(seeds_url, self.parse_seeds, dont_filter=True,
-                             meta={'dont_obey_robotstxt': True})
-
-    def parse_seeds(self, response):
-        for url, in csv.reader(io.StringIO(response.text)):
-            if url == 'url':
-                continue  # optional header
-            url = add_http_if_no_scheme(url)
-            yield scrapy.Request(url, self.parse)
-
-
-
-class BaseSpider(SeedsSpider):
     random_seed = 0
     response_count = 0
+
+    # if you're using command-line arguments override this set in a spider
+    # like this:
+    # ALLOWED_ARGUMENTS = {'my_new_argument'} | BaseSpider.ALLOWED_ARGUMENTS
+    ALLOWED_ARGUMENTS = {
+        'seeds_url',
+    }
+
+    def __init__(self, *args, **kwargs):
+        self._validate_arguments(kwargs)
+        super().__init__(*args, **kwargs)
+
+    def _validate_arguments(self, kwargs):
+        for k in kwargs:
+            if k not in self.ALLOWED_ARGUMENTS:
+                raise ValueError(
+                    "Unsupported argument: %s. Supported arguments: %r" % (
+                        k, self.ALLOWED_ARGUMENTS)
+                )
 
     def start_requests(self):
         self.seen_urls = set()
@@ -60,7 +61,22 @@ class BaseSpider(SeedsSpider):
         self.crawler.signals.connect(self.on_offdomain_request_dropped,
                                      offdomain_request_dropped)
 
-        return super().start_requests()
+
+        if self.seeds_url is None:
+            raise ValueError("Please pass seeds_url to the spider. "
+                             "It should be a text file with urls, one per line.")
+
+        seeds_url = guess_scheme(self.seeds_url)
+
+        yield scrapy.Request(seeds_url, self._parse_seeds, dont_filter=True,
+                             meta={'dont_obey_robotstxt': True})
+
+    def _parse_seeds(self, response):
+        for url, in csv.reader(io.StringIO(response.text)):
+            if url == 'url':
+                continue  # optional header
+            url = add_http_if_no_scheme(url)
+            yield scrapy.Request(url, self.parse)
 
     def increase_response_count(self):
         """
