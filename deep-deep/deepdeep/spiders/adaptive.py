@@ -23,6 +23,7 @@ import datetime
 
 import networkx as nx
 from twisted.internet.task import LoopingCall
+
 from sklearn.externals import joblib
 import scrapy
 
@@ -38,6 +39,7 @@ from deepdeep.score_pages import (
     get_constant_scores,
     response_max_scores,
 )
+from deepdeep.queues import DomainFormFinderRequestsQueue, BalancedPriorityQueue
 
 
 class AdaptiveSpider(BaseSpider):
@@ -150,6 +152,23 @@ class AdaptiveSpider(BaseSpider):
             json.dump(self.params, f)
 
         self.logger.info("Crawl {} started".format(self.crawl_id))
+
+    def get_scheduler_queue(self):
+        """
+        This method is called by scheduler to create a new queue.
+        """
+        def new_queue(domain):
+            return DomainFormFinderRequestsQueue(
+                domain=domain,
+                form_types=list(self.link_classifiers.keys()),
+                G=self.G,
+                zeroone_loss=self.reward_zeroone_loss
+            )
+
+        return BalancedPriorityQueue(
+            queue_factory=new_queue,
+            eps=self.epsilon,
+        )
 
     def parse(self, response):
         self.increase_response_count()
