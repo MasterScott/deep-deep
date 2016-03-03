@@ -1,18 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Adaptive crawling algorithm.
-
-It works by training a link classifier at the same time crawl is happening.
-This classifer is then used to direct crawler to more promising links.
-
-The first assumption is that all links to the same page are similar
-if they are from the same domain. Because crawler works in-domain
-it means we don't have to turn off dupefilter, and that there is no
-need to handle all incoming links to a page - it is enough to
-consider only one. This means instead of a general crawl graph
-we're working with a crawl tree.
-"""
-
 import itertools
 import json
 import os
