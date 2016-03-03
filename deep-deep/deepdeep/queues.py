@@ -180,6 +180,12 @@ class RequestsPriorityQueue:
         top_priority = self.get_priority(self.entries[0])
         return top_priority
 
+    @property
+    def next_request(self):
+        if not self.entries:
+            return None
+        return self.entries[0][2]
+
     @classmethod
     def get_priority(cls, entry):
         return -entry[0]
@@ -190,7 +196,7 @@ class RequestsPriorityQueue:
 
     def _pop_empty(self):
         """ Pop all removed entries from heap top """
-        while self.entries and self.entries[0][2] is self.REMOVED:
+        while self.entries and self.next_request is self.REMOVED:
             heapq.heappop(self.entries)
 
     def iter_requests(self):
@@ -205,7 +211,7 @@ class RequestsPriorityQueue:
         return len(self.entries)
 
 
-def get_request_predicted_scores(request, G):
+def _get_request_predicted_scores(request, G):
     """ Return stored predicted scores for a request """
     node_id = request.meta.get('node_id')
     if node_id is None:
@@ -230,7 +236,7 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
 
     def compute_priority(self, request):
         """ Return request priority based on its scores """
-        scores = get_request_predicted_scores(request, self.G)
+        scores = _get_request_predicted_scores(request, self.G)
         if scores is None:
             if self.domain is None:
                 expected_reward = 100  # seed URLs
@@ -291,7 +297,7 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
 
     def _print_req(self, req):
         if req:
-            scores = get_request_predicted_scores(req, self.G)
+            scores = _get_request_predicted_scores(req, self.G)
             link_tp = '?'
             scores_repr = None
             if scores:
@@ -344,6 +350,13 @@ class BalancedPriorityQueue:
         # print(queue, dict(zip(domains, p)))
         req = queue.pop_random() if random_policy else queue.pop()
         return req
+
+    def get_domains(self):
+        return [d for d, q in self.queues.items() if q]
+
+    def get_domain_queue(self, domain):
+        """ Return a queue for a domain """
+        return self.queues[domain]
 
     def update_observed_scores(self, response, observed_scores):
         domain = get_response_domain(response)

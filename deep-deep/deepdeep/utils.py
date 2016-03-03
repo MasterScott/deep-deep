@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import itertools
+import collections
 from urllib.parse import unquote_plus
 from urllib.parse import urlsplit
 
@@ -92,3 +93,44 @@ def softmax(z, t=1.0):
     z = np.asanyarray(z) / t
     z_exp = np.exp(z - np.max(z))
     return z_exp / z_exp.sum()
+
+
+class MaxScores:
+    """
+    >>> s = MaxScores(['x', 'y'])
+    >>> s.update("foo", {"x": 0.1, "y": 0.3})
+    >>> s.update("foo", {"x": 0.01, "y": 0.4})
+    >>> s.update("bar", {"x": 0.8})
+    >>> s.sum() == {'x': 0.9, 'y': 0.4}
+    True
+    >>> s.avg() == {'x': 0.45, 'y': 0.2}
+    True
+    >>> len(s)
+    2
+    """
+    def __init__(self, classes):
+        self.classes = classes
+        self._zero_scores = {key: 0.0 for key in self.classes}
+        self.scores = collections.defaultdict(lambda: self._zero_scores.copy())
+
+    def update(self, domain, scores):
+        cur_scores = self.scores[domain]
+        for k, v in scores.items():
+            cur_scores[k] = max(cur_scores[k], v)
+
+    def sum(self):
+        return {
+            k: sum(v[k] for v in self.scores.values())
+            for k in self.classes
+        }
+
+    def avg(self):
+        if not self.scores:
+            return self._zero_scores.copy()
+        return {k: v/len(self.scores) for k, v in self.sum().items()}
+
+    def __getitem__(self, domain):
+        return self.scores[domain]
+
+    def __len__(self):
+        return len(self.scores)

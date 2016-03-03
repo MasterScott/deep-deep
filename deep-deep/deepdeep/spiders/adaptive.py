@@ -32,6 +32,7 @@ from deepdeep.utils import (
     get_response_domain,
     set_request_domain,
     ensure_folder_exists,
+    MaxScores,
 )
 from deepdeep import score_links
 from deepdeep.score_pages import (
@@ -88,9 +89,6 @@ class AdaptiveSpider(BaseSpider):
         'epsilon',
         'positive_weight',
         'reward_zeroone_loss',
-        'stats_interval',
-        'checkpoint_interval',
-        'update_link_scores_interval',
         'crawl_id',
     }
 
@@ -459,41 +457,3 @@ class AdaptiveSpider(BaseSpider):
                 task.stop()
         self.save_classifiers('classifiers.joblib')
         self.save_crawl_graph('crawl.pickle.gz')
-
-
-class MaxScores:
-    """
-    >>> s = MaxScores(['x', 'y'])
-    >>> s.update("foo", {"x": 0.1, "y": 0.3})
-    >>> s.update("foo", {"x": 0.01, "y": 0.4})
-    >>> s.update("bar", {"x": 0.8})
-    >>> s.sum() == {'x': 0.9, 'y': 0.4}
-    True
-    >>> s.avg() == {'x': 0.45, 'y': 0.2}
-    True
-    >>> len(s)
-    2
-    """
-    def __init__(self, classes):
-        self.classes = classes
-        self._zero_scores = {form_type: 0.0 for form_type in self.classes}
-        self.scores = collections.defaultdict(lambda: self._zero_scores.copy())
-
-    def update(self, domain, scores):
-        cur_scores = self.scores[domain]
-        for k, v in scores.items():
-            cur_scores[k] = max(cur_scores[k], v)
-
-    def sum(self):
-        return {
-            k: sum(v[k] for v in self.scores.values())
-            for k in self.classes
-        }
-
-    def avg(self):
-        if not self.scores:
-            return self._zero_scores.copy()
-        return {k: v/len(self.scores) for k, v in self.sum().items()}
-
-    def __len__(self):
-        return len(self.scores)
