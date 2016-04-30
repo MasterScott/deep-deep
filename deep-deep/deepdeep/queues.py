@@ -94,6 +94,7 @@ class RequestsPriorityQueue:
     2. call queue.change_priority(entry, new_priority) for each entry;
     3. call queue.heapify()
 
+    It also allows to remove a request from a queue using remove_entry.
     """
 
     REMOVED = object()

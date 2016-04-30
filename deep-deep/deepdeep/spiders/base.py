@@ -5,6 +5,7 @@ import logging
 import random
 
 import scrapy
+from scrapy.utils.url import canonicalize_url
 from scrapy.exceptions import CloseSpider
 from scrapy.utils.response import get_base_url
 from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
@@ -109,9 +110,10 @@ class BaseSpider(scrapy.Spider):
             # Here we filter them to avoid creating unnecessary nodes
             # and edges.
             # FIXME: use canonical URLs?
-            if url in self.seen_urls:
+            canonical = canonicalize_url(url)
+            if canonical in self.seen_urls:
                 continue
-            self.seen_urls.add(url)
+            self.seen_urls.add(canonical)
 
             yield link
 
