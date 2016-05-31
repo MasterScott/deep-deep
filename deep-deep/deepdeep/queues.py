@@ -315,9 +315,18 @@ class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
 
 
 class BalancedPriorityQueue:
-    """ This queue samples other queues randomly, based on their weights """
+    """
+    This queue samples other queues randomly, based on their weights
+    (i.e. based on top request priority in a given queue).
+
+    "Bins" to balance should be set in ``request.meta['scheduler_slot']``.
+    For each ``scheduler_slot`` value a separate queue is created.
+
+    queue_factory should be a function which returns a new
+    RequestsPriorityQueue for a given slot name.
+    """
     def __init__(self, queue_factory, eps=0.0):
-        self.queues = {}  # domain -> queue
+        self.queues = {}  # scheduler slot -> queue
         self.eps = eps
         self.queue_factory = queue_factory
 
@@ -328,14 +337,14 @@ class BalancedPriorityQueue:
     #     pass
 
     def push(self, request):
-        domain = request.meta.get('domain')
-        if domain not in self.queues:
-            self.queues[domain] = self.queue_factory(domain)
-        self.queues[domain].push(request)
+        slot = request.meta.get('scheduler_slot')
+        if slot not in self.queues:
+            self.queues[slot] = self.queue_factory(slot)
+        self.queues[slot].push(request)
 
     def pop(self):
-        domains = list(self.queues.keys())
-        if not domains:
+        keys = list(self.queues.keys())
+        if not keys:
             return
 
         random_policy = self.eps and random.random() < self.eps
@@ -343,32 +352,38 @@ class BalancedPriorityQueue:
             print("ε", end=' ')
 
         if random_policy:
-            queue = self.queues[random.choice(domains)]
+            queue = self.queues[random.choice(keys)]
         else:
-            weights = [self.queues[domain].max_priority() for domain in domains]
+            weights = [self.queues[key].max_priority() for key in keys]
             p = softmax(weights, t=FLOAT_PRIORITY_MULTIPLIER)
-            queue = self.queues[np.random.choice(domains, p=p)]
+            queue = self.queues[np.random.choice(keys, p=p)]
         # print(queue, dict(zip(domains, p)))
-        req = queue.pop_random() if random_policy else queue.pop()
-        return req
+        request = queue.pop_random() if random_policy else queue.pop()
+        return request
 
-    def get_domains(self):
-        return [d for d, q in self.queues.items() if q]
+    def get_active_slots(self):
+        return [key for key, queue in self.queues.items() if queue]
 
-    def get_domain_queue(self, domain):
-        """ Return a queue for a domain """
-        return self.queues[domain]
+    def get_queue(self, slot):
+        return self.queues[slot]
+
+    def iter_active_requests(self):
+        """ Return an iterator over all requests in a queue """
+        for q in self.queues.values():
+            yield from q.iter_requests()
+
+    def __len__(self):
+        return sum(len(q) for q in self.queues.values())
+
+
+class BalancedDomainPriorityQueue(BalancedPriorityQueue):
+    """ This queue samples other queues randomly, based on their weights """
 
     def update_observed_scores(self, response, observed_scores):
         domain = get_response_domain(response)
         if domain not in self.queues:
             return
         self.queues[domain].update_observed_scores(observed_scores)
-
-    def iter_active_requests(self):
-        """ Return an iterator over all requests in a queue """
-        for q in self.queues.values():
-            yield from q.iter_requests()
 
     def iter_active_node_ids(self):
         """ Return an iterator over node ids of all queued requests """
@@ -380,6 +395,3 @@ class BalancedPriorityQueue:
     def recalculate_priorities(self):
         for q in self.queues.values():
             q.recalculate_priorities()
-
-    def __len__(self):
-        return sum(len(q) for q in self.queues.values())

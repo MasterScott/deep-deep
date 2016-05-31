@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
 import itertools
-import networkx as nx
 
+import networkx as nx
 import scrapy
 from scrapy import signals
-from scrapy.utils.request import request_fingerprint
-from scrapy.dupefilter import RFPDupeFilter
+from scrapy.dupefilters import RFPDupeFilter
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseExtension:
@@ -26,14 +29,33 @@ class BaseExtension:
 class CrawlGraphMiddleware(BaseExtension):
     """
     This spider middleware keeps track of crawl graph.
-    The graph is accessible from spider as ``spider.G`` attribute.
+    The graph is accessible from spider as ``spider.G`` attribute;
+    node ID of each response is available as ``response.meta['node_id']``.
 
     Enable this middleware in settings::
 
         SPIDER_MIDDLEWARES = {
-            'deepdeep.middleware.CrawlGraphMiddleware': 400,
+            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
         }
 
+    By default each node contains the following information::
+
+        {
+            'url': <response url>,
+            'original url': <request url (before redirects)>,
+            'visited': True/False,  # this is False for links which are not visited yet
+            'ok': True/False,       # True if response is a HTTP 200 HTML response
+        }
+
+    Spider can add more information to node in two ways:
+
+    1. set ``request.meta['node_data']`` dict with additional node attributes
+       when sending the request;
+    2. update ``self.G.node[response.meta['node_id']]`` dict after response
+       is received (usually in a parse_.. callback).
+
+    Edge data is empty by default; to attach information to edges send requests
+    with non-empty ``request.meta['edge_data']`` dicts.
     """
     def init(self):
         # fixme: it should be in spider state
@@ -41,10 +63,15 @@ class CrawlGraphMiddleware(BaseExtension):
         self.node_ids = itertools.count()
         self.crawler.signals.connect(self.on_spider_closed,
                                      signals.spider_closed)
-        self.dupefilter = RFPDupeFilter()  # HACKHACKHACK
+
+        self.filename = self.crawler.settings.get('GRAPH_FILENAME',
+                                                  'graph.pickle')
+
+        # HACKHACKHACK
+        self.dupefilter = RFPDupeFilter()
 
     def on_spider_closed(self):
-        nx.write_gpickle(self.G, "graph.pickle")
+        nx.write_gpickle(self.G, self.filename)
 
     def process_spider_input(self, response, spider):
         """
@@ -62,7 +89,13 @@ class CrawlGraphMiddleware(BaseExtension):
             ok=self._response_ok(response),
         )
         spider.G.add_node(node_id, data)
-        print("VISITED NODE", node_id, data)
+        logger.debug("VISITED NODE %s %s", node_id, data)
+
+        self.crawler.stats.inc_value('graph_nodes/visited')
+        if data['ok']:
+            self.crawler.stats.inc_value('graph_nodes/visited/ok')
+        else:
+            self.crawler.stats.inc_value('graph_nodes/visited/err')
 
     def process_spider_output(self, response, result, spider):
         for request in result:
@@ -96,7 +129,8 @@ class CrawlGraphMiddleware(BaseExtension):
         edge_data = request.meta.pop('edge_data', {})
         spider.G.add_node(new_node_id, node_data)
         spider.G.add_edge(this_node_id, new_node_id, edge_data)
-        print("CREATED NODE", this_node_id, "->", new_node_id, node_data)
+        logger.debug("Created node %s -> %s %s", this_node_id, new_node_id, node_data)
+        self.crawler.stats.set_value('graph_nodes/created', len(spider.G))
         return True
 
     def _response_ok(self, response):

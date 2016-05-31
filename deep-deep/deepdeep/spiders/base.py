@@ -62,10 +62,9 @@ class BaseSpider(scrapy.Spider):
         self.crawler.signals.connect(self.on_offdomain_request_dropped,
                                      offdomain_request_dropped)
 
-
         if self.seeds_url is None:
-            raise ValueError("Please pass seeds_url to the spider. "
-                             "It should be a text file with urls, one per line.")
+            raise ValueError("Please pass seeds_url to the spider. It should "
+                             "be a text file with urls, one per line.")
 
         seeds_url = guess_scheme(self.seeds_url)
 
@@ -109,7 +108,6 @@ class BaseSpider(scrapy.Spider):
             # Requests are also filtered out in Scheduler by dupefilter.
             # Here we filter them to avoid creating unnecessary nodes
             # and edges.
-            # FIXME: use canonical URLs?
             canonical = canonicalize_url(url)
             if canonical in self.seen_urls:
                 continue

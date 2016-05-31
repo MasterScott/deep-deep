@@ -5,6 +5,7 @@ from urllib.parse import urljoin
 from scrapy.linkextractors import IGNORED_EXTENSIONS
 from scrapy.utils.url import url_has_any_extension
 
+
 _NEW_IGNORED = {'7z', '7zip', 'xz', 'gz', 'tar', 'bz2', 'cdr', 'apk'}
 _IGNORED = set(IGNORED_EXTENSIONS) | _NEW_IGNORED
 _IGNORED = {'.' + e for e in _IGNORED}

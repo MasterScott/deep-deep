@@ -23,8 +23,8 @@ ROBOTSTXT_OBEY = True
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 CONCURRENT_REQUESTS = 48
 
-# limit crawl to 10K successful pages
-CLOSESPIDER_ITEMCOUNT = 10000
+# limit crawl to 50K successful pages
+CLOSESPIDER_ITEMCOUNT = 50000
 
 REACTOR_THREADPOOL_MAXSIZE = 10
 
@@ -32,6 +32,7 @@ RETRY_ENABLED = False
 AJAXCRAWL_ENABLED = True
 DOWNLOAD_WARNSIZE = 1*1024*1024
 DOWNLOAD_MAXSIZE = 1*1024*1024
+DOWNLOAD_TIMEOUT = 20
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See http://doc.scrapy.org/en/latest/topics/autothrottle.html
@@ -43,9 +44,9 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 2.0
 # Disable cookies for broad crawl (enabled by default)
 COOKIES_ENABLED = False
 
-
 TELNETCONSOLE_ENABLED = True
-
+MONITOR_DOWNLOADS_INTERVAL = 10
+DUMP_STATS_INTERVAL = 30
 
 SCHEDULER = 'deepdeep.scheduler.Scheduler'
 
@@ -55,7 +56,7 @@ SCHEDULER = 'deepdeep.scheduler.Scheduler'
 import sys
 
 HTTPCACHE_ENABLED = True
-HTTPCACHE_EXPIRATION_SECS = 60*60*24*30
+HTTPCACHE_EXPIRATION_SECS = 60*60*24*30  # 30 days
 HTTPCACHE_DIR = 'httpcache-%s' % sys.version_info[0]
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
@@ -82,9 +83,10 @@ DOWNLOADER_MIDDLEWARES = {
 
 # Enable or disable extensions
 # See http://scrapy.readthedocs.org/en/latest/topics/extensions.html
-#EXTENSIONS = {
-#    'scrapy.extensions.telnet.TelnetConsole': None,
-#}
+EXTENSIONS = {
+    'deepdeep.extensions.MonitorDownloadsExtension': 100,
+    'deepdeep.extensions.DumpStatsExtension': 101,
+}
 
 # Configure item pipelines
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html

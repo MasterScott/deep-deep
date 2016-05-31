@@ -4,6 +4,12 @@ from deepdeep.queues import RequestsPriorityQueue
 
 
 class Scheduler:
+    """
+    This scheduler allows to customize request queue class:
+    by default ``deepdeep.queues.RequestsPriorityQueue`` is used,
+    but a spider can implement ``get_scheduler_queue()`` method
+    which returns another queue class.
+    """
     def __init__(self, dupefilter, stats):
         self.dupefilter = dupefilter
         self.stats = stats

@@ -30,7 +30,7 @@ class CrawlAllSpider(BaseSpider):
         'DEPTH_LIMIT': 1,  # override it using -s DEPTH_LIMIT=2
         'DEPTH_PRIORITY': 1,
         'SPIDER_MIDDLEWARES': {
-            'deepdeep.middleware.CrawlGraphMiddleware': 400,
+            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
         }
     }
 
@@ -38,7 +38,7 @@ class CrawlAllSpider(BaseSpider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.heuristic_re = re.compile("(regi|join|create|sign|account|user|login)")
+        self.heuristic_re = re.compile("(regi|join|create|sign|account|user|login|recover|password)")
         self.heuristic = int(self.heuristic)
         self.shuffle = int(self.shuffle)
 
@@ -50,9 +50,7 @@ class CrawlAllSpider(BaseSpider):
             return
 
         res = forms_info(response)
-
-        yield {
-            'url': response.url,
+        self.G.node[response.meta['node_id']]['info'] = {
             'depth': response.meta['depth'],
             'forms': res,
             'scores': max_scores(res),
@@ -71,22 +69,28 @@ class CrawlAllSpider(BaseSpider):
         When shuffle=True, links are selected at random.
         When prioritize_re is not None, links which URLs follow specified
         regexes are prioritized.
+
+        Raw link features are stored as edge data.
         """
 
         # limit crawl to the first domain
         domain = get_response_domain(response)
-        urls = [link['url'] for link in self.iter_link_dicts(response, domain)]
+        links = list(self.iter_link_dicts(response, domain))
 
         if shuffle:
-            random.shuffle(urls)
+            random.shuffle(links)
 
-        for priority, url in zip(decreasing_priority_iter(), urls):
+        for priority, link in zip(decreasing_priority_iter(), links):
+            url = link['url']
+
             if prioritize_re:
                 s = prioritize_re.search
                 p = urlsplit(url)
                 if s(p.path) or s(p.query) or s(p.fragment):
                     priority = 1
 
-            req = scrapy.Request(url, priority=priority)
+            req = scrapy.Request(url, priority=priority, meta={
+                'edge_data': {'link': link}
+            })
             set_request_domain(req, domain)
             yield req
