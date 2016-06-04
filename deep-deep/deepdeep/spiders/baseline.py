@@ -44,13 +44,16 @@ class CrawlAllSpider(BaseSpider):
 
     def parse(self, response):
         self.increase_response_count()
+        node_id = response.meta['node_id']
 
         if not hasattr(response, 'text'):
             # can't decode the response
+            # XXX: it should be set in midleware, why doesn't it work?
+            # self.G[node_id]['ok'] = False
             return
 
         res = forms_info(response)
-        self.G.node[response.meta['node_id']]['info'] = {
+        self.G.node[node_id]['info'] = {
             'depth': response.meta['depth'],
             'forms': res,
             'scores': max_scores(res),
@@ -90,7 +93,7 @@ class CrawlAllSpider(BaseSpider):
                     priority = 1
 
             req = scrapy.Request(url, priority=priority, meta={
-                'edge_data': {'link': link}
+                'edge_data': link,
             })
             set_request_domain(req, domain)
             yield req

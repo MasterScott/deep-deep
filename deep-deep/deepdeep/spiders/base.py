@@ -26,6 +26,7 @@ class BaseSpider(scrapy.Spider):
     seeds_url = None  # set it in command line
     random_seed = 0
     response_count = 0
+    initial_priority = 5
 
     # if you're using command-line arguments override this set in a spider
     # like this:
@@ -76,7 +77,7 @@ class BaseSpider(scrapy.Spider):
             if url == 'url':
                 continue  # optional header
             url = add_http_if_no_scheme(url)
-            yield scrapy.Request(url, self.parse)
+            yield scrapy.Request(url, self.parse, priority=self.initial_priority)
 
     def increase_response_count(self):
         """
@@ -92,10 +93,19 @@ class BaseSpider(scrapy.Spider):
         if self.response_count >= max_items:
             raise CloseSpider("item_count")
 
-    def iter_link_dicts(self, response, domain=None):
+    def iter_link_dicts(self, response, domain=None, deduplicate=True):
         """
         Extract links from the response.
+        If ``domain`` is not None, only links for a given domain are returned.
+        If ``deduplicate`` is True (default), links with seen URLs
+        are not returned.
         """
+        links = self._iter_link_dicts(response, domain)
+        if deduplicate:
+            links = self.deduplicate_links(links)
+        return links
+
+    def _iter_link_dicts(self, response, domain=None):
         base_url = get_base_url(response)
         for link in extract_link_dicts(response.selector, base_url):
             url = link['url']
@@ -104,16 +114,26 @@ class BaseSpider(scrapy.Spider):
             if domain is not None and get_domain(url) != domain:
                 continue
 
-            # Filter out duplicate URLs.
-            # Requests are also filtered out in Scheduler by dupefilter.
-            # Here we filter them to avoid creating unnecessary nodes
-            # and edges.
+            yield link
+
+    def deduplicate_links(self, links, indices=False):
+        """
+        Filter out links with duplicate URLs.
+        Requests are also filtered out in Scheduler by dupefilter.
+        Here we filter them to avoid creating unnecessary nodes
+        and edges.
+        """
+        for idx, link in enumerate(links):
+            url = link['url']
             canonical = canonicalize_url(url)
             if canonical in self.seen_urls:
                 continue
             self.seen_urls.add(canonical)
+            if indices:
+                yield idx, link
+            else:
+                yield link
 
-            yield link
 
     def on_offdomain_request_dropped(self, request):
         self.increase_response_count()

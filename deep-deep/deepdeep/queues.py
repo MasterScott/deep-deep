@@ -99,8 +99,8 @@ class RequestsPriorityQueue:
 
     REMOVED = object()
 
-    REMOVED_PRIORITY = 1000 * FLOAT_PRIORITY_MULTIPLIER
-    EMPTY_PRIORITY = -1000 * FLOAT_PRIORITY_MULTIPLIER
+    REMOVED_PRIORITY = 10000 * FLOAT_PRIORITY_MULTIPLIER
+    EMPTY_PRIORITY = -10000 * FLOAT_PRIORITY_MULTIPLIER
 
     def __init__(self, fifo=True):
         self.entries = []
@@ -348,8 +348,8 @@ class BalancedPriorityQueue:
             return
 
         random_policy = self.eps and random.random() < self.eps
-        if random_policy:
-            print("ε", end=' ')
+        # if random_policy:
+        #     print("ε", end=' ')
 
         if random_policy:
             queue = self.queues[random.choice(keys)]

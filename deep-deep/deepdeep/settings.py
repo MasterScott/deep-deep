@@ -17,8 +17,8 @@ NEWSPIDER_MODULE = 'deepdeep.spiders'
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = 'deepdeep'
 
-# Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+# Don't obey robots.txt rules
+ROBOTSTXT_OBEY = False
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 CONCURRENT_REQUESTS = 48

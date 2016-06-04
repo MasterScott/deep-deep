@@ -18,7 +18,6 @@ import json
 import os
 import time
 import random
-import collections
 import datetime
 
 import networkx as nx
