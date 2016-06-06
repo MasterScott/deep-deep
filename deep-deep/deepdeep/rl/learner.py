@@ -68,7 +68,7 @@ class QLearner:
             return np.ones(A.shape[0]) * self.initial_predictions
         return clf.predict(A)
 
-    def predict_one(self, a, online=False) -> np.ndarray:
+    def predict_one(self, a, online=False) -> float:
         return self.predict(sparse.vstack([a]), online=online)[0]
 
     @log_time

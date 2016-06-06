@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import csv
+from typing import Optional
+
 import io
 import logging
 import random
@@ -23,7 +25,7 @@ class BaseSpider(scrapy.Spider):
     and calls parse for each URL.
     """
 
-    seeds_url = None  # set it in command line
+    seeds_url = None  # type: Optional[str]
     random_seed = 0
     response_count = 0
     initial_priority = 5
