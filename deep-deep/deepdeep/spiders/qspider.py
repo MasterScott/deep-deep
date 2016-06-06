@@ -105,6 +105,17 @@ class QSpider(BaseSpider):
     def parse(self, response):
         self.increase_response_count()
 
+        if not hasattr(response, 'text'):
+            if 'link_vector' in response.meta:
+                # learn to avoid non-html responses
+                self.Q.add_experience(
+                    a_t=response.meta['link_vector'],
+                    A_t1=None,
+                    r_t1=0
+                )
+                self.debug_Q()
+            return
+
         domain = get_response_domain(response)
         links = list(self.iter_link_dicts(
             response=response,
