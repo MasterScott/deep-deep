@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-import time
-
-import numpy as np
-from sklearn.linear_model import SGDRegressor
 import scrapy
 from scipy import sparse
 import tqdm
+from sklearn.feature_extraction.text import HashingVectorizer
+from formasaurus.text import normalize
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
@@ -21,11 +19,8 @@ from deepdeep.utils import (
 from deepdeep.score_pages import (
     response_max_scores,
 )
-from deepdeep.rl.experience import ExperienceMemory
-from sklearn.feature_extraction.text import HashingVectorizer
-import sklearn.base
-
-from formasaurus.text import normalize
+from deepdeep.rl.learner import QLearner
+from deepdeep.utils import log_time
 
 
 def _link_inside_text(link):
@@ -44,127 +39,13 @@ def LinkVectorizer():
     )
 
 
-def log_time(func):
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        try:
-            return func(*args, **kwargs)
-        finally:
-            end = time.time()
-            print("{} took {:0.4f}s".format(func, end-start))
-    return wrapper
-
-
-class QLearner:
-    """
-    Q-learning estimator with function approximation, experience replay
-    and double learning.
-
-    Todo: Q(s, a) instead of just Q(a).
-    """
-    def __init__(self,
-                 double=True,
-                 steps_before_switch=100,
-                 gamma=0.3,
-                 initial_predictions=0.05,
-                 sample_size=300,
-                 on_model_changed=None,
-                 ):
-        assert double is True, "double=False is not implemented"
-        assert 0 <= gamma <= 1
-        self.steps_before_switch = steps_before_switch
-        self.gamma = gamma
-        self.initial_predictions = initial_predictions
-        self.sample_size = sample_size
-        self.on_model_changed = on_model_changed
-
-        self.clf_online = SGDRegressor(
-            penalty='l2',
-            average=False,
-            n_iter=1,
-            learning_rate='constant',
-            # loss='epsilon_insensitive',
-            alpha=1e-6,
-            eta0=0.1,
-        )
-
-        self.clf_target = sklearn.base.clone(self.clf_online)  # type: SGDRegressor
-        self.memory = ExperienceMemory()
-        self.t_ = 0
-
-    def add_experience(self, a_t, A_t1, r_t1):
-        self.t_ += 1
-        self.memory.add(
-            a_t=a_t,
-            A_t1=A_t1,
-            r_t1=r_t1,
-        )
-        self.fit_iteration(self.sample_size)
-        if (self.t_ % self.steps_before_switch) == 0:
-            self._update_target_clf()
-            if self.on_model_changed:
-                self.on_model_changed()
-
-    def predict(self, A, online=False):
-        clf = self.clf_target if not online else self.clf_online
-        if clf.coef_ is None:
-            return np.ones(A.shape[0]) * self.initial_predictions
-        return clf.predict(A)
-
-    def predict_one(self, a, online=False):
-        return self.predict(sparse.vstack([a]), online=online)[0]
-
-    @log_time
-    def fit_iteration(self, sample_size):
-        sample = self.memory.sample(sample_size)
-        a_t_list, A_t1_list, r_t1_list = zip(*sample)
-        rewards = np.asarray(r_t1_list)
-
-        Q_t1_values = np.zeros_like(rewards)
-        for idx, A_t1 in enumerate(A_t1_list or []):
-            # TODO: more vectorization
-            if A_t1 is not None:
-                scores = self.predict(A_t1, online=True)
-                best_idx = scores.argmax()
-                a_t1 = A_t1[best_idx]
-                Q_t1_values[idx] = self.predict_one(a_t1, online=False)
-
-        X = sparse.vstack(a_t_list)
-        y = rewards + self.gamma * Q_t1_values
-        self.clf_online.partial_fit(X, y)
-
-    def _update_target_clf(self):
-        trained_params = [
-            't_',
-            'coef_',
-            'intercept_',
-            'average_coef_',
-            'average_intercept_',
-            'standard_coef_',
-            'standard_intercept_',
-        ]
-        for attr in trained_params:
-            if not hasattr(self.clf_online, attr):
-                continue
-            data = getattr(self.clf_online, attr)
-            if hasattr(data, 'copy'):
-                data = data.copy()
-            setattr(self.clf_target, attr, data)
-
-    def coef_norm(self, online=True):
-        clf = self.clf_target if not online else self.clf_online
-        if clf.coef_ is None:
-            return 0
-        return np.sqrt((clf.coef_ ** 2).sum())
-
-
 def score_to_priority(score: float) -> int:
     return int(score * FLOAT_PRIORITY_MULTIPLIER)
 
 
 class QSpider(BaseSpider):
     name = 'q'
-
+    ALLOWED_ARGUMENTS = {'double'} | BaseSpider.ALLOWED_ARGUMENTS
     custom_settings = {
         'DEPTH_LIMIT': 5,
         # 'SPIDER_MIDDLEWARES': {
@@ -176,6 +57,7 @@ class QSpider(BaseSpider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.Q = QLearner(
+            double_learning=kwargs.get('double', True),
             # steps_before_switch=100,
             on_model_changed=self.on_model_changed,
         )

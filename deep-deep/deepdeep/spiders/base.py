@@ -17,7 +17,7 @@ from deepdeep.middlewares import offdomain_request_dropped
 
 class BaseSpider(scrapy.Spider):
     """
-    Base spider class witho common code.
+    Base spider class with common code.
 
     Among other things it parses a file at ``seeds_url`` (URL per line)
     and calls parse for each URL.
@@ -133,7 +133,6 @@ class BaseSpider(scrapy.Spider):
                 yield idx, link
             else:
                 yield link
-
 
     def on_offdomain_request_dropped(self, request):
         self.increase_response_count()

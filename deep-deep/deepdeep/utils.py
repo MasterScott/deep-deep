@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 import itertools
+import functools
 import collections
 from urllib.parse import unquote_plus
 from urllib.parse import urlsplit
 
 import numpy as np
+import time
+
 from formasaurus.utils import get_domain
 
 
@@ -134,3 +137,15 @@ class MaxScores:
 
     def __len__(self):
         return len(self.scores)
+
+
+def log_time(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            end = time.time()
+            print("{} took {:0.4f}s".format(func, end-start))
+    return wrapper
