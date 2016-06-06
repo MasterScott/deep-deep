@@ -58,7 +58,6 @@ class QSpider(BaseSpider):
         super().__init__(*args, **kwargs)
         self.Q = QLearner(
             double_learning=kwargs.get('double', True),
-            # steps_before_switch=100,
             on_model_changed=self.on_model_changed,
         )
         self.link_vec = LinkVectorizer()

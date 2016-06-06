@@ -67,6 +67,7 @@ to this score - more promising domain is, more often it is selected.
 import heapq
 import itertools
 import random
+from typing import List, Tuple, Any
 
 import numpy as np
 # from twisted.internet.task import LoopingCall
@@ -103,7 +104,7 @@ class RequestsPriorityQueue:
     EMPTY_PRIORITY = -10000 * FLOAT_PRIORITY_MULTIPLIER
 
     def __init__(self, fifo=True):
-        self.entries = []
+        self.entries = []  # type: List[Tuple[int, int, Any]]
         step = 1 if fifo else -1
         self.counter = itertools.count(step=step)
 
