@@ -65,7 +65,7 @@ def extract_link_dicts(selector, base_url):
         link['url'] = url
         link['attrs'] = dict(attrs)
 
-        link_text = a.xpath('string()').extract_first(default='')
+        link_text = a.xpath('normalize-space()').extract_first(default='')
         img_link_text = a.xpath('./img/@alt').extract_first(default='')
         link['inside_text'] = ' '.join([link_text, img_link_text]).strip()
 
