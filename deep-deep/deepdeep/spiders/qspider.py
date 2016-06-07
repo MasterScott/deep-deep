@@ -11,6 +11,7 @@ from deepdeep.queues import (
     RequestsPriorityQueue,
     FLOAT_PRIORITY_MULTIPLIER
 )
+from deepdeep.scheduler import Scheduler
 from deepdeep.spiders.base import BaseSpider
 from deepdeep.utils import (
     get_response_domain,
@@ -70,6 +71,8 @@ class QSpider(BaseSpider):
             self.recalculate_request_priorities()
 
     def get_reward(self, response: TextResponse) -> float:
+        if not hasattr(response, 'text'):
+            return 0.0
         scores = response_max_scores(response)
         # scores.get('registration', 0.0) +
         return scores.get('password/login recovery', 0.0)
@@ -77,10 +80,11 @@ class QSpider(BaseSpider):
 
     def parse(self, response):
         self.increase_response_count()
+        self.close_finished_queues()
 
         if 'link' in response.meta:
             reward = self.get_reward(response)
-            self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
+            self.logger.info("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
                 reward,
                 response.request.priority / FLOAT_PRIORITY_MULTIPLIER,
                 response.url,
@@ -134,7 +138,7 @@ class QSpider(BaseSpider):
                     req = scrapy.Request(link['url'], priority=priority, meta=meta)
                     set_request_domain(req, domain)
                     if score > 0.5:
-                        self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
+                        self.logger.info("PROMISING LINK {:0.4f}: {}\n        {}".format(
                             score, link['url'], link['inside_text']
                         ))
                     yield req
@@ -148,13 +152,15 @@ class QSpider(BaseSpider):
         return BalancedPriorityQueue(queue_factory=new_queue, eps=0.2)
 
     @property
-    def scheduler_queue(self) -> BalancedPriorityQueue:
-        return self.crawler.engine.slot.scheduler.queue
+    def scheduler(self) -> Scheduler:
+        return self.crawler.engine.slot.scheduler
 
-    def get_queue_for_response(self, response: TextResponse) -> RequestsPriorityQueue:
-        """ Return a queue response belongs to """
-        slot = response.request.meta.get('scheduler_slot')
-        return self.scheduler_queue.get_queue(slot)
+    def close_finished_queues(self):
+        for slot in self.scheduler.queue.get_active_slots():
+            score = self.domain_scores[slot]['score']
+            if score > 0.7:
+                print("Queue {} is closed; score={:0.4f}.".format(slot, score))
+                self.scheduler.close_slot(slot)
 
     @log_time
     def recalculate_request_priorities(self):
@@ -166,13 +172,13 @@ class QSpider(BaseSpider):
             score = self.Q.predict_one(link_vector)
             if score > 0.5:
                 link = request.meta['link']
-                self.logger.debug("UPDATED PROMISING LINK {:0.4f}: {}\n        {}".format(
+                self.logger.info("UPDATED PROMISING LINK {:0.4f}: {}\n        {}".format(
                     score, link['url'], link['inside_text']
                 ))
             return score_to_priority(score)
 
-        for slot in tqdm.tqdm(self.scheduler_queue.get_active_slots()):
-            queue = self.scheduler_queue.get_queue(slot)
+        for slot in tqdm.tqdm(self.scheduler.queue.get_active_slots()):
+            queue = self.scheduler.queue.get_queue(slot)
             queue.update_all_priorities(request_priority)
 
     def debug_Q(self):
@@ -214,3 +220,7 @@ class QSpider(BaseSpider):
         ]
         msg = '\n'.join(reward_lines)
         print(msg)
+        print("Domains: {} open, {} closed".format(
+            len(self.scheduler.queue.get_active_slots()),
+            len(self.scheduler.queue.closed_slots),
+        ))

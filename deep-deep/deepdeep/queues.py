@@ -82,6 +82,10 @@ from deepdeep.utils import (
 FLOAT_PRIORITY_MULTIPLIER = 10000
 
 
+class QueueClosed(Exception):
+    pass
+
+
 class RequestsPriorityQueue:
     """
     In-memory priority queue for requests.
@@ -340,12 +344,15 @@ class BalancedPriorityQueue:
     def __init__(self, queue_factory, eps=0.0, balancing_temperature=1.0):
         assert balancing_temperature > 0
         self.queues = {}  # scheduler slot -> queue
+        self.closed_slots = set()
         self.eps = eps
         self.queue_factory = queue_factory
         self.balancing_temperature = balancing_temperature
 
     def push(self, request):
         slot = request.meta.get('scheduler_slot')
+        if slot in self.closed_slots:
+            raise QueueClosed()
         if slot not in self.queues:
             self.queues[slot] = self.queue_factory(slot)
         self.queues[slot].push(request)
@@ -373,15 +380,26 @@ class BalancedPriorityQueue:
     def get_active_slots(self):
         return [key for key, queue in self.queues.items() if queue]
 
-    def get_queue(self, slot):
+    def get_queue(self, slot: str):
         return self.queues[slot]
+
+    def close_queue(self, slot: str) -> int:
+        """
+        Close a queue. Requests for this queue are dropped,
+        including requests which are already scheduled.
+
+        Return a number of dropped requests.
+        """
+        self.closed_slots.add(slot)
+        queue = self.queues.pop(slot, None)
+        return len(queue or [])
 
     def iter_active_requests(self):
         """ Return an iterator over all requests in a queue """
         for q in self.queues.values():
             yield from q.iter_requests()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return sum(len(q) for q in self.queues.values())
 
 

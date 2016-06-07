@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from scrapy.utils.misc import load_object
-from deepdeep.queues import RequestsPriorityQueue
+from deepdeep.queues import RequestsPriorityQueue, QueueClosed, BalancedPriorityQueue
 
 
 class Scheduler:
@@ -46,8 +46,11 @@ class Scheduler:
                 self.dupefilter.log(request, self.spider)
                 return False
 
-        self.queue.push(request)
-        self.stats.inc_value('custom-scheduler/enqueued/', spider=self.spider)
+        try:
+            self.queue.push(request)
+            self.stats.inc_value('custom-scheduler/enqueued/', spider=self.spider)
+        except QueueClosed:
+            self.stats.inc_value('custom-scheduler/dropped/', spider=self.spider)
         return True
 
     def next_request(self):
@@ -55,3 +58,15 @@ class Scheduler:
         if request:
             self.stats.inc_value('custom-scheduler/dequeued/', spider=self.spider)
         return request
+
+    def close_slot(self, slot):
+        """
+        Stop processing requests for a given slot.
+        This function doesn't work if scheduler queue is
+        not a BalancedPriorityQueue.
+        """
+        num_dropped = self.queue.close_queue(slot)
+        self.stats.inc_value('custom-scheduler/dropped/', num_dropped,
+                             spider=self.spider)
+        self.stats.inc_value('custom-scheduler/dequeued/', num_dropped,
+                             spider=self.spider)
