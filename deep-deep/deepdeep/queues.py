@@ -325,17 +325,24 @@ class BalancedPriorityQueue:
 
     queue_factory should be a function which returns a new
     RequestsPriorityQueue for a given slot name.
+
+    ``eps`` is a probability of choosing random queue and
+    returning random request from it. Because sampling is two-stage,
+    it is biased towards queues with fewer requests.
+
+    ``balancing_temperature`` is a parameter which controls how to
+    choose the queue to get requests from. If the value is high,
+    queue will be selected almost randomly. If the value is close to zero,
+    queue with a highest request priority will be selected with a probability
+    close to 1. Default value is 1.0; it means queues are selected randomly
+    with probabilities proportional to max priority of their requests.
     """
-    def __init__(self, queue_factory, eps=0.0):
+    def __init__(self, queue_factory, eps=0.0, balancing_temperature=1.0):
+        assert balancing_temperature > 0
         self.queues = {}  # scheduler slot -> queue
         self.eps = eps
         self.queue_factory = queue_factory
-
-        # self.gc_task = LoopingCall(self._gc)
-        # self.gc_task.start(60, now=False)
-
-    # def _gc(self):
-    #     pass
+        self.balancing_temperature = balancing_temperature
 
     def push(self, request):
         slot = request.meta.get('scheduler_slot')
@@ -356,7 +363,8 @@ class BalancedPriorityQueue:
             queue = self.queues[random.choice(keys)]
         else:
             weights = [self.queues[key].max_priority() for key in keys]
-            p = softmax(weights, t=FLOAT_PRIORITY_MULTIPLIER)
+            temperature = FLOAT_PRIORITY_MULTIPLIER * self.balancing_temperature
+            p = softmax(weights, t=temperature)
             queue = self.queues[np.random.choice(keys, p=p)]
         # print(queue, dict(zip(domains, p)))
         request = queue.pop_random() if random_policy else queue.pop()
