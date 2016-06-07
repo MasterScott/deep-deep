@@ -138,9 +138,7 @@ class QSpider(BaseSpider):
                     req = scrapy.Request(link['url'], priority=priority, meta=meta)
                     set_request_domain(req, domain)
                     if score > 0.5:
-                        self.logger.info("PROMISING LINK {:0.4f}: {}\n        {}".format(
-                            score, link['url'], link['inside_text']
-                        ))
+                        self._log_promising_link(link, score)
                     yield req
 
     def get_scheduler_queue(self):
@@ -171,15 +169,17 @@ class QSpider(BaseSpider):
                 return request.priority
             score = self.Q.predict_one(link_vector)
             if score > 0.5:
-                link = request.meta['link']
-                self.logger.info("UPDATED PROMISING LINK {:0.4f}: {}\n        {}".format(
-                    score, link['url'], link['inside_text']
-                ))
+                self._log_promising_link(request.meta['link'], score)
             return score_to_priority(score)
 
         for slot in tqdm.tqdm(self.scheduler.queue.get_active_slots()):
             queue = self.scheduler.queue.get_queue(slot)
             queue.update_all_priorities(request_priority)
+
+    def _log_promising_link(self, link, score):
+        self.logger.info("PROMISING LINK {:0.4f}: {}\n        {}".format(
+            score, link['url'], link['inside_text']
+        ))
 
     def debug_Q(self):
         examples = [
