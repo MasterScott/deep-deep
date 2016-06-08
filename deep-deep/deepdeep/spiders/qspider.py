@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+from typing import Dict, Tuple
 
 import tqdm
 from sklearn.feature_extraction.text import HashingVectorizer
+from sklearn.pipeline import make_union
 from formasaurus.text import normalize
 import scrapy
 from scrapy.http import TextResponse
+from scrapy.utils.url import canonicalize_url
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
@@ -16,6 +19,7 @@ from deepdeep.spiders.base import BaseSpider
 from deepdeep.utils import (
     get_response_domain,
     set_request_domain,
+    url_path_query,
     MaxScores,
 )
 from deepdeep.score_pages import response_max_scores
@@ -23,20 +27,37 @@ from deepdeep.rl.learner import QLearner
 from deepdeep.utils import log_time
 
 
-def _link_inside_text(link):
+def _link_inside_text(link: Dict):
     text = link.get('inside_text', '')
     title = link.get('attrs', {}).get('title', '')
     return normalize(text + ' ' + title)
 
 
-def LinkVectorizer():
-    return HashingVectorizer(
+def _clean_url(link: Dict):
+    return url_path_query(canonicalize_url(link.get('url')))
+
+
+def LinkVectorizer(use_url: bool=False):
+    text_vec = HashingVectorizer(
         preprocessor=_link_inside_text,
-        ngram_range=(1, 2),
-        n_features=100*1024,
+        n_features=1024*1024,
         binary=True,
         norm='l2',
+        # ngram_range=(1, 2),
+        analyzer='char',
+        ngram_range=(3, 5),
     )
+    if not use_url:
+        return text_vec
+
+    url_vec = HashingVectorizer(
+        preprocessor=_clean_url,
+        n_features=1024*1024,
+        binary=True,
+        analyzer='char',
+        ngram_range=(4,5),
+    )
+    return make_union(text_vec, url_vec)
 
 
 def score_to_priority(score: float) -> int:
@@ -45,7 +66,10 @@ def score_to_priority(score: float) -> int:
 
 class QSpider(BaseSpider):
     name = 'q'
-    ALLOWED_ARGUMENTS = {'double'} | BaseSpider.ALLOWED_ARGUMENTS
+    ALLOWED_ARGUMENTS = (
+        {'double', 'task', 'use_urls', 'eps', 'balancing_temperature', 'gamma'} |
+        BaseSpider.ALLOWED_ARGUMENTS
+    )
     custom_settings = {
         'DEPTH_LIMIT': 5,
         # 'SPIDER_MIDDLEWARES': {
@@ -54,13 +78,46 @@ class QSpider(BaseSpider):
     }
     initial_priority = score_to_priority(5)
 
+    # Goal. Allowed values:
+    #     "search"
+    #     "login"
+    #     "registration"
+    #     "password/login recovery"
+    #     "contact/comment"
+    #     "join mailing list"
+    #     "order/add to cart"
+    #     "other"
+    task = 'password/login recovery'
+
+    # whether to use URL path/query as a feature
+    use_urls = 0
+
+    # use Double Learning
+    double = 1
+
+    # probability of selecting a random request
+    eps = 0.2
+
+    # 0 <= gamma <= 1; lower values make spider focus on immediate reward.
+    gamma = 0.3
+
+    # softmax temperature for domain balancer;
+    # higher values => more randomeness.
+    balancing_temperature = 1.0
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.eps = float(self.eps)
+        self.balancing_temperature = float(self.balancing_temperature)
+        self.gamma = float(self.gamma)
+
         self.Q = QLearner(
-            double_learning=kwargs.get('double', True),
+            gamma=self.gamma,
+            double_learning=bool(int(self.double)),
             on_model_changed=self.on_model_changed,
         )
-        self.link_vec = LinkVectorizer()
+        self.link_vec = LinkVectorizer(bool(int(self.use_urls)))
         self.total_reward = 0
         self.model_changes = 0
         self.domain_scores = MaxScores(['score'])
@@ -74,9 +131,14 @@ class QSpider(BaseSpider):
         if not hasattr(response, 'text'):
             return 0.0
         scores = response_max_scores(response)
-        # scores.get('registration', 0.0) +
-        return scores.get('password/login recovery', 0.0)
-        # return scores.get('login', 0.0)
+        return scores.get(self.task, 0.0)
+
+    def close_finished_queues(self):
+        for slot in self.scheduler.queue.get_active_slots():
+            score = self.domain_scores[slot]['score']
+            if score > 0.7:
+                print("Queue {} is closed; score={:0.4f}.".format(slot, score))
+                self.scheduler.close_slot(slot)
 
     def parse(self, response):
         self.increase_response_count()
@@ -99,7 +161,8 @@ class QSpider(BaseSpider):
                     A_t1=None,
                     r_t1=0
                 )
-                self.debug_Q()
+                self.log_stats()
+                yield self.get_stats_item()
             return
 
         domain = get_response_domain(response)
@@ -118,7 +181,8 @@ class QSpider(BaseSpider):
                 A_t1=links_matrix,
                 r_t1=reward
             )
-            self.debug_Q()
+            self.log_stats()
+            yield self.get_stats_item()
             self.domain_scores.update(domain, {'score': reward})
 
         if links:
@@ -147,18 +211,15 @@ class QSpider(BaseSpider):
         """
         def new_queue(domain):
             return RequestsPriorityQueue(fifo=True)
-        return BalancedPriorityQueue(queue_factory=new_queue, eps=0.2)
+        return BalancedPriorityQueue(
+            queue_factory=new_queue,
+            eps=self.eps,
+            balancing_temperature=self.balancing_temperature,
+        )
 
     @property
     def scheduler(self) -> Scheduler:
         return self.crawler.engine.slot.scheduler
-
-    def close_finished_queues(self):
-        for slot in self.scheduler.queue.get_active_slots():
-            score = self.domain_scores[slot]['score']
-            if score > 0.7:
-                print("Queue {} is closed; score={:0.4f}.".format(slot, score))
-                self.scheduler.close_slot(slot)
 
     @log_time
     def recalculate_request_priorities(self):
@@ -181,28 +242,30 @@ class QSpider(BaseSpider):
             score, link['url'], link['inside_text']
         ))
 
-    def debug_Q(self):
+    def log_stats(self):
         examples = [
-            'forgot password',
-            'registration',
-            'register',
-            'sign up',
-            'my account',
-            'my little pony',
-            'comment',
-            'sign in',
-            'login',
-            'forum',
-            'forums',
-            'sadhjgrhgsfd',
-            'забыли пароль'
+            ['forgot password', 'http://example.com/wp-login.php?action=lostpassword'],
+            ['registration', 'http://example.com/register'],
+            ['register', 'http://example.com/reg'],
+            ['sign up', 'http://example.com/users/new'],
+            ['my account', 'http://example.com/account/my?sess=GJHFHJS21123'],
+            ['my little pony', 'http://example.com?category=25?sort=1&'],
+            ['comment', 'http://example.com/blog?p=2'],
+            ['sign in', 'http://example.com/users/login'],
+            ['login', 'http://example.com/users/login'],
+            ['forum', 'http://example.com/mybb'],
+            ['forums', 'http://example.com/mybb'],
+            ['sadhjgrhgsfd', 'http://example.com/new-to-exhibiting/discover-your-stand-position/'],
+            ['забыли пароль', 'http://example.com/users/send-password/'],
         ]
-        links = [{'inside_text': e} for e in examples]
+        links = [{'inside_text': txt, 'url': url} for txt, url in examples]
         A = self.link_vec.transform(links)
         scores_target = self.Q.predict(A)
         scores_online = self.Q.predict(A, online=True)
-        for ex, score1, score2 in zip(examples, scores_target, scores_online):
-            print("{:20s} {:0.4f} {:0.4f}".format(ex, score1, score2))
+        for (txt, url), score1, score2 in zip(examples, scores_target, scores_online):
+            print(" {:0.4f} {:0.4f} {:20s} {}".format(
+                score1, score2, txt, url_path_query(url),
+            ))
 
         print("t={}, return={:0.4f}, avg return={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
             self.Q.t_,
@@ -220,7 +283,20 @@ class QSpider(BaseSpider):
         ]
         msg = '\n'.join(reward_lines)
         print(msg)
-        print("Domains: {} open, {} closed".format(
-            len(self.scheduler.queue.get_active_slots()),
-            len(self.scheduler.queue.closed_slots),
-        ))
+
+        domains_open, domains_closed = self._domain_stats()
+        print("Domains: {} open, {} closed".format(domains_open, domains_closed))
+
+    def get_stats_item(self):
+        domains_open, domains_closed = self._domain_stats()
+        return {
+            't': self.Q.t_,
+            'return': self.total_reward,
+            'domains_open': domains_open,
+            'domains_closed': domains_closed,
+        }
+
+    def _domain_stats(self) -> Tuple[int, int]:
+        domains_open = len(self.scheduler.queue.get_active_slots())
+        domains_closed = len(self.scheduler.queue.closed_slots)
+        return domains_open, domains_closed
