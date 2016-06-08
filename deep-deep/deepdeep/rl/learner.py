@@ -79,8 +79,7 @@ class QLearner:
 
         Q_t1_values = np.zeros_like(rewards)
         for idx, A_t1 in enumerate(A_t1_list or []):
-            # TODO: more vectorization
-            if A_t1 is not None:
+            if A_t1 is not None and A_t1.shape[0] > 0:
                 scores = self.predict(A_t1, online=True)
                 if self.double_learning:
                     # This is a simple variant of double learning
@@ -92,7 +91,7 @@ class QLearner:
                     a_t1 = A_t1[best_idx]
                     Q_t1_values[idx] = self.predict_one(a_t1, online=False)
                 else:
-                    Q_t1_values[idx] = scores.max()
+                    Q_t1_values[idx] = scores.max()  # vanilla Q-learning
 
         X = sparse.vstack(a_t_list)
         y = rewards + self.gamma * Q_t1_values
@@ -122,5 +121,6 @@ class QLearner:
             return 0
         return np.sqrt((clf.coef_ ** 2).sum())
 
+    @log_time
     def save(self, path: str) -> None:
         joblib.dump(self, path, compress=3)
