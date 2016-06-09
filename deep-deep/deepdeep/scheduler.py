@@ -47,8 +47,8 @@ class Scheduler:
                 return False
 
         try:
-            self.queue.push(request)
             self.stats.inc_value('custom-scheduler/enqueued/', spider=self.spider)
+            self.queue.push(request)
         except QueueClosed:
             self.stats.inc_value('custom-scheduler/dropped/', spider=self.spider)
         return True
@@ -67,6 +67,4 @@ class Scheduler:
         """
         num_dropped = self.queue.close_queue(slot)
         self.stats.inc_value('custom-scheduler/dropped/', num_dropped,
-                             spider=self.spider)
-        self.stats.inc_value('custom-scheduler/dequeued/', num_dropped,
                              spider=self.spider)
