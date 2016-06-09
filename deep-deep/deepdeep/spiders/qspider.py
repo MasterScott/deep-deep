@@ -197,6 +197,7 @@ class QSpider(BaseSpider):
                         'link_vector': v,
                         'link': link,  # FIXME: turn it off for production
                         'scheduler_slot': domain,
+                        'domain': domain,  # stay on-domain
                     }
                     priority = score_to_priority(score)
                     req = scrapy.Request(link['url'], priority=priority, meta=meta)
