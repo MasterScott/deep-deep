@@ -24,7 +24,7 @@ class QLearner:
                  steps_before_switch: int = 100,
                  gamma: float = 0.3,
                  initial_predictions: float = 0.05,
-                 sample_size: int = 300,
+                 replay_sample_size: int = 300,
                  on_model_changed: Optional[Callable[[], None]]=None,
                  ) -> None:
         assert 0 <= gamma < 1
@@ -32,7 +32,7 @@ class QLearner:
         self.steps_before_switch = steps_before_switch
         self.gamma = gamma
         self.initial_predictions = initial_predictions
-        self.sample_size = sample_size
+        self.replay_sample_size = replay_sample_size
         self.on_model_changed = on_model_changed
 
         self.clf_online = SGDRegressor(
@@ -56,7 +56,7 @@ class QLearner:
             A_t1=A_t1,
             r_t1=r_t1,
         )
-        self.fit_iteration(self.sample_size)
+        self.fit_iteration(self.replay_sample_size)
         if (self.t_ % self.steps_before_switch) == 0:
             self._update_target_clf()
             if self.on_model_changed is not None:

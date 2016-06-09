@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
+import json
+from pathlib import Path
 from typing import Dict, Tuple
 
+import joblib
 import tqdm
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.pipeline import make_union
 from formasaurus.text import normalize
 import scrapy
 from scrapy.http import TextResponse
+from scrapy.statscollectors import StatsCollector
 from scrapy.utils.url import canonicalize_url
 
 from deepdeep.queues import (
@@ -66,12 +70,15 @@ def score_to_priority(score: float) -> int:
 
 class QSpider(BaseSpider):
     name = 'q'
-    ALLOWED_ARGUMENTS = (
-        {'double', 'task', 'use_urls', 'eps', 'balancing_temperature', 'gamma'} |
-        BaseSpider.ALLOWED_ARGUMENTS
-    )
+
+    _ARGS = {
+        'double', 'task', 'use_urls', 'eps', 'balancing_temperature', 'gamma',
+        'replay_sample_size', 'steps_before_switch', 'task_done_threshold',
+        'checkpoint_path', 'checkpoint_interval',
+    }
+    ALLOWED_ARGUMENTS = _ARGS | BaseSpider.ALLOWED_ARGUMENTS
     custom_settings = {
-        'DEPTH_LIMIT': 5,
+        'DEPTH_LIMIT': 10,
         # 'SPIDER_MIDDLEWARES': {
         #     'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
         # }
@@ -89,6 +96,9 @@ class QSpider(BaseSpider):
     #     "other"
     task = 'password/login recovery'
 
+    # Probability threshold required to consider task finished
+    task_done_threshold = 0.7
+
     # whether to use URL path/query as a feature
     use_urls = 0
 
@@ -98,12 +108,49 @@ class QSpider(BaseSpider):
     # probability of selecting a random request
     eps = 0.2
 
-    # 0 <= gamma <= 1; lower values make spider focus on immediate reward.
-    gamma = 0.3
+    # 0 <= gamma < 1; lower values make spider focus on immediate reward.
+    #
+    #     gamma     % of credit assigned to n-th previous step  effective steps
+    #     -----     ------------------------------------------  ---------------
+    #     0.00      100   0   0   0   0   0   0   0   0   0     1
+    #     0.05      100   5   0   0   0   0   0   0   0   0     2
+    #     0.10      100  10   1   0   0   0   0   0   0   0     2
+    #     0.15      100  15   2   0   0   0   0   0   0   0     2
+    #     0.20      100  20   4   0   0   0   0   0   0   0     2
+    #     0.25      100  25   6   1   0   0   0   0   0   0     3
+    #     0.30      100  30   9   2   0   0   0   0   0   0     3
+    #     0.35      100  35  12   4   1   0   0   0   0   0     3
+    #     0.40      100  40  16   6   2   1   0   0   0   0     4
+    #     0.45      100  45  20   9   4   1   0   0   0   0     4
+    #     0.50      100  50  25  12   6   3   1   0   0   0     5
+    #     0.55      100  55  30  16   9   5   2   1   0   0     6
+    #     0.60      100  60  36  21  12   7   4   2   1   1     6
+    #     0.65      100  65  42  27  17  11   7   4   3   2     7
+    #     0.70      100  70  48  34  24  16  11   8   5   4     9
+    #     0.75      100  75  56  42  31  23  17  13  10   7     10
+    #     0.80      100  80  64  51  40  32  26  20  16  13     10+
+    #     0.85      100  85  72  61  52  44  37  32  27  23     10+
+    #     0.90      100  90  81  72  65  59  53  47  43  38     10+
+    #     0.95      100  95  90  85  81  77  73  69  66  63     10+
+    #
+    gamma = 0.4
 
     # softmax temperature for domain balancer;
-    # higher values => more randomeness.
+    # higher values => more randomeness in domain selection.
     balancing_temperature = 1.0
+
+    # parameters of online Q function are copied to target Q function
+    # every `steps_before_switch` steps
+    steps_before_switch = 100
+
+    # how many examples to fetch from experience replay on each iteration
+    replay_sample_size = 300
+
+    # current model is saved every checkpoint_interval timesteps
+    checkpoint_interval = 1000
+
+    # Where to store checkpoints. By default they are not stored.
+    checkpoint_path = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -111,16 +158,27 @@ class QSpider(BaseSpider):
         self.eps = float(self.eps)
         self.balancing_temperature = float(self.balancing_temperature)
         self.gamma = float(self.gamma)
+        self.use_urls = bool(int(self.use_urls))
+        self.double = bool(int(self.double))
+        self.steps_before_switch = int(self.steps_before_switch)
+        self.replay_sample_size = int(self.replay_sample_size)
+        self.checkpoint_interval = int(self.checkpoint_interval)
 
         self.Q = QLearner(
+            steps_before_switch=self.steps_before_switch,
+            replay_sample_size=self.replay_sample_size,
             gamma=self.gamma,
-            double_learning=bool(int(self.double)),
+            double_learning=self.double,
             on_model_changed=self.on_model_changed,
         )
-        self.link_vec = LinkVectorizer(bool(int(self.use_urls)))
+        self.link_vec = LinkVectorizer(use_url=self.use_urls)
         self.total_reward = 0
         self.model_changes = 0
         self.domain_scores = MaxScores(['score'])
+
+        params = json.dumps(self.get_params(), indent=4)
+        print(params)
+        (Path(self.checkpoint_path)/"params.json").write_text(params)
 
     def on_model_changed(self):
         self.model_changes += 1
@@ -131,12 +189,14 @@ class QSpider(BaseSpider):
         if not hasattr(response, 'text'):
             return 0.0
         scores = response_max_scores(response)
-        return scores.get(self.task, 0.0)
+        score = scores.get(self.task, 0.0)
+        return score
+        # return score if score > 0.5 else 0
 
     def close_finished_queues(self):
         for slot in self.scheduler.queue.get_active_slots():
             score = self.domain_scores[slot]['score']
-            if score > 0.7:
+            if score > self.task_done_threshold:
                 print("Queue {} is closed; score={:0.4f}.".format(slot, score))
                 self.scheduler.close_slot(slot)
 
@@ -146,7 +206,7 @@ class QSpider(BaseSpider):
 
         if 'link' in response.meta:
             reward = self.get_reward(response)
-            self.logger.info("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
+            self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
                 reward,
                 response.request.priority / FLOAT_PRIORITY_MULTIPLIER,
                 response.url,
@@ -162,6 +222,7 @@ class QSpider(BaseSpider):
                     r_t1=0
                 )
                 self.log_stats()
+                self.maybe_checkpoint()
                 yield self.get_stats_item()
             return
 
@@ -182,6 +243,7 @@ class QSpider(BaseSpider):
                 r_t1=reward
             )
             self.log_stats()
+            self.maybe_checkpoint()
             yield self.get_stats_item()
             self.domain_scores.update(domain, {'score': reward})
 
@@ -239,7 +301,7 @@ class QSpider(BaseSpider):
             queue.update_all_priorities(request_priority)
 
     def _log_promising_link(self, link, score):
-        self.logger.info("PROMISING LINK {:0.4f}: {}\n        {}".format(
+        self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
             score, link['url'], link['inside_text']
         ))
 
@@ -285,19 +347,54 @@ class QSpider(BaseSpider):
         msg = '\n'.join(reward_lines)
         print(msg)
 
-        domains_open, domains_closed = self._domain_stats()
-        print("Domains: {} open, {} closed".format(domains_open, domains_closed))
+        stats = self.get_stats_item()
+        print("Domains: {domains_open} open, {domains_closed} closed; "
+              "{todo} requests in queue, {processed} processed, {dropped} dropped".format(**stats))
 
     def get_stats_item(self):
         domains_open, domains_closed = self._domain_stats()
+        stats = self.crawler.stats  # type: StatsCollector
+        enqueued = stats.get_value('custom-scheduler/enqueued/', 0)
+        dequeued = stats.get_value('custom-scheduler/dequeued/', 0)
+        dropped = stats.get_value('custom-scheduler/dropped/', 0)
+        todo = enqueued - dequeued - dropped
+
         return {
             't': self.Q.t_,
             'return': self.total_reward,
             'domains_open': domains_open,
             'domains_closed': domains_closed,
+            'enqueued': enqueued,
+            'processed': dequeued,
+            'dropped': dropped,
+            'todo': todo,
         }
 
     def _domain_stats(self) -> Tuple[int, int]:
         domains_open = len(self.scheduler.queue.get_active_slots())
         domains_closed = len(self.scheduler.queue.closed_slots)
         return domains_open, domains_closed
+
+    def get_params(self):
+        keys = self._ARGS - {'checkpoint_path', 'checkpoint_interval'}
+        return {key: getattr(self, key) for key in keys}
+
+    def maybe_checkpoint(self):
+        if not self.checkpoint_path:
+            return
+        if (self.Q.t_ % self.checkpoint_interval) != 0:
+            return
+        path = pathlib.Path(self.checkpoint_path)
+        filename = "Q-%s.joblib" % self.Q.t_
+        self.dump_policy(path.joinpath(filename))
+
+    @log_time
+    def dump_policy(self, path):
+        """ Save the current policy """
+        data = {
+            'Q': self.Q,
+            'link_vec': self.link_vec,
+            '_params': self.get_params(),
+        }
+        joblib.dump(data, str(path), compress=3)
+
