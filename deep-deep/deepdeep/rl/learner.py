@@ -121,6 +121,7 @@ class QLearner:
             return 0
         return np.sqrt((clf.coef_ ** 2).sum())
 
-    @log_time
-    def save(self, path: str) -> None:
-        joblib.dump(self, path, compress=3)
+    def __getstate__(self):
+        dct = self.__dict__.copy()
+        del dct['on_model_changed']
+        return dct
