@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from .base import BaseSpider
+from ._base import BaseSpider
 
 
 class CheckerSpider(BaseSpider):

@@ -10,7 +10,7 @@ from deepdeep.utils import (
     set_request_domain,
     decreasing_priority_iter,
 )
-from deepdeep.spiders.base import BaseSpider
+from deepdeep.spiders._base import BaseSpider
 from deepdeep.score_pages import forms_info, max_scores
 
 

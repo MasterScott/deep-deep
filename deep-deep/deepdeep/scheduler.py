@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from scrapy.utils.misc import load_object
-from deepdeep.queues import RequestsPriorityQueue, QueueClosed, BalancedPriorityQueue
+from deepdeep.queues import RequestsPriorityQueue, QueueClosed
 
 
 class Scheduler:

@@ -26,7 +26,8 @@ class ExperienceMemory:
     * discount $\gamma$? How does it work? There is a footnote in
       http://arxiv.org/pdf/1511.05952v4.pdf;
     * $s_t$ state (information about the page the link is extracted from);
-    * $s_{t+1}$ state (information about the page the link leads to)
+    * $s_{t+1}$ state (information about the page the link leads to) - what
+      is it for?
     * multiple rewards for multiple tasks
 
     With this data we can train a regression model for $Q(s,a)$ function:

@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from typing import Callable, Optional
 
-import joblib
 import numpy as np
 from scipy import sparse
 import sklearn.base

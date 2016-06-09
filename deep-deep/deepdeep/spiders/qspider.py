@@ -19,7 +19,7 @@ from deepdeep.queues import (
     FLOAT_PRIORITY_MULTIPLIER
 )
 from deepdeep.scheduler import Scheduler
-from deepdeep.spiders.base import BaseSpider
+from deepdeep.spiders._base import BaseSpider
 from deepdeep.utils import (
     get_response_domain,
     set_request_domain,
@@ -270,7 +270,8 @@ class QSpider(BaseSpider):
 
     def get_scheduler_queue(self):
         """
-        This method is called by scheduler to create a new queue.
+        This method is called by deepdeep.scheduler.Scheduler
+        to create a new queue.
         """
         def new_queue(domain):
             return RequestsPriorityQueue(fifo=True)
@@ -384,7 +385,7 @@ class QSpider(BaseSpider):
             return
         if (self.Q.t_ % self.checkpoint_interval) != 0:
             return
-        path = pathlib.Path(self.checkpoint_path)
+        path = Path(self.checkpoint_path)
         filename = "Q-%s.joblib" % self.Q.t_
         self.dump_policy(path.joinpath(filename))
 

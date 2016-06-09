@@ -72,11 +72,6 @@ def url_path_query(url):
     return unquote_plus(p.path + '?' + p.query).lower()
 
 
-def ensure_folder_exists(path):
-    """ Create folder `path` if necessary """
-    os.makedirs(path, exist_ok=True)
-
-
 def softmax(z, t=1.0):
     """
     Softmax function with temperature.

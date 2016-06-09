@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Scheduling
-==========
+Queues
+======
 
 There are several conflicting goals which scheduler needs to acheive.
 It should:
@@ -12,26 +12,10 @@ It should:
    (ε-greedy policy);
 4. allow to update link priorities dynamically.
 
-For each domain there is a priority queue for requests.
-To select next link crawler first chooses a domain, then chooses
-a link for this domain. It allows to crawl all domains and prioritise
-more promising requests.
-
-2. If some kind of forms is common and many links lead to these forms
-   then link scores would be high for this kind of forms for most links.
-   This is a problem if some domain doesn't have these forms at all.
-   Example: let's say 80% of websites have search forms on each page.
-   So classifier learned to assign each link 0.8 score on average.
-   If a domain doesn't have a search form then the reward for most links
-   will be a high number of 0.8, and so crawler can spend most time trying
-   to find a search form instead of trying to solve other tasks.
-
-Choosing domain to crawl
-------------------------
-
-For each domain crawler maintains a score - max expected reward.
-Next domain to crawl is selected randomly, with a probability proportional
-to this score - more promising domain is, more often it is selected.
+This module contains custom Scrapy queues which allow to do that:
+:class:`BalancedPriorityQueue` allows to have per-domain request queues and
+sample from them, :class:`RequestsPriorityQueue` is a per-domain queue
+which allows to update request priorities.
 """
 import heapq
 import itertools
@@ -40,12 +24,7 @@ from typing import List, Tuple, Any
 
 import numpy as np
 # from twisted.internet.task import LoopingCall
-from deepdeep.utils import (
-    dict_subtract,
-    dict_aggregate_max,
-    softmax,
-    get_response_domain
-)
+from deepdeep.utils import softmax
 
 
 FLOAT_PRIORITY_MULTIPLIER = 10000
@@ -186,108 +165,6 @@ class RequestsPriorityQueue:
         return len(self.entries)
 
 
-def _get_request_predicted_scores(request, G):
-    """ Return stored predicted scores for a request """
-    node_id = request.meta.get('node_id')
-    if node_id is None:
-        return
-
-    node = G.node[node_id]
-    assert not node['visited']
-    return node['predicted_scores']
-
-
-class DomainFormFinderRequestsQueue(RequestsPriorityQueue):
-    def __init__(self, domain, form_types, G, zeroone_loss):
-        super().__init__(fifo=True)
-        self.domain = domain
-        self.max_observed_scores = {tp: 0 for tp in form_types}
-        self.G = G
-        self.zeroone_loss = zeroone_loss
-
-    def push(self, request):
-        request.priority = self.compute_priority(request)
-        return super().push(request)
-
-    def compute_priority(self, request):
-        """ Return request priority based on its scores """
-        scores = _get_request_predicted_scores(request, self.G)
-        if scores is None:
-            if self.domain is None:
-                expected_reward = 100  # seed URLs
-            else:
-                expected_reward = 0.1  # no classifier yet
-        else:
-            expected_rewards = dict_subtract(scores, self.max_observed_scores)
-            expected_reward = max(max(expected_rewards.values()), 0)
-        return int(expected_reward * FLOAT_PRIORITY_MULTIPLIER)
-
-    def update_observed_scores(self, observed_page_scores):
-        if self.zeroone_loss:
-            # use the same loss for reward and for link classifier
-            # FIXME: it should be handled from the other side, we should
-            # train classifier with cross-entropy objective
-            observed_page_scores = {tp: 1.0 if v > 0.5 else 0.0
-                                    for tp, v in observed_page_scores.items()}
-        new_max = dict_aggregate_max(
-            self.max_observed_scores,
-            observed_page_scores
-        )
-        if new_max != self.max_observed_scores:
-            scores_diff = sorted([
-                (v, tp)
-                for tp, v in dict_subtract(new_max, self.max_observed_scores).items()
-                if v > 0.01
-            ], reverse=True)
-
-            scores_diff_repr = ", ".join([
-                "{} +{:0.2f}".format(tp, v)
-                for v, tp in scores_diff
-            ])
-            print("======== Max scores updated for {}: {}".format(
-                self.domain, scores_diff_repr
-            ))
-            self.max_observed_scores = new_max
-            self.recalculate_priorities()
-
-    def recalculate_priorities(self):
-        """
-        Update all request priorities.
-        It can be necessary in 2 cases:
-
-        1. predicted request scores are changed, or
-        2. max_scores are changed.
-        """
-        self.update_all_priorities(self.compute_priority)
-
-    def pop(self):
-        req = super().pop()
-        self._print_req(req)
-        return req
-
-    def pop_random(self, n_attempts=10):
-        req = super().pop_random(n_attempts)
-        self._print_req(req)
-        return req
-
-    def _print_req(self, req):
-        if req:
-            scores = _get_request_predicted_scores(req, self.G)
-            link_tp = '?'
-            scores_repr = None
-            if scores:
-                # scores = {k: v for k, v in scores.items()}
-                rewards = dict_subtract(scores, self.max_observed_scores)
-                link_tp = sorted(rewards.items(), key=lambda kv: -kv[1])[0][0]
-                scores_repr = {k: int(v*100) for k,v in scores.items()}
-            print(req.priority, scores_repr or scores, req.url, link_tp.upper())
-
-    def __repr__(self):
-        return "DomainRequestQueue({}; #requests={}, max priority={})".format(
-            self.domain, len(self), self.max_priority()
-        )
-
-
 class BalancedPriorityQueue:
     """
     This queue samples other queues randomly, based on their weights
@@ -370,24 +247,3 @@ class BalancedPriorityQueue:
 
     def __len__(self) -> int:
         return sum(len(q) for q in self.queues.values())
-
-
-class BalancedDomainPriorityQueue(BalancedPriorityQueue):
-    """ This queue samples other queues randomly, based on their weights """
-
-    def update_observed_scores(self, response, observed_scores):
-        domain = get_response_domain(response)
-        if domain not in self.queues:
-            return
-        self.queues[domain].update_observed_scores(observed_scores)
-
-    def iter_active_node_ids(self):
-        """ Return an iterator over node ids of all queued requests """
-        for req in self.iter_active_requests():
-            node_id = req.meta.get('node_id')
-            if node_id:
-                yield node_id
-
-    def recalculate_priorities(self):
-        for q in self.queues.values():
-            q.recalculate_priorities()
