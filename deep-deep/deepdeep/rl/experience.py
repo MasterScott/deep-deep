@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from scipy import sparse as sp
 import random
+from typing import List, Tuple, Any, Optional
+
+from scipy import sparse as sp
 
 
 class ExperienceMemory:
@@ -24,7 +26,7 @@ class ExperienceMemory:
     * discount $\gamma$? How does it work? There is a footnote in
       http://arxiv.org/pdf/1511.05952v4.pdf;
     * $s_t$ state (information about the page the link is extracted from);
-    * $s_{t+1}$ state (information about the page the link leads to).
+    * $s_{t+1}$ state (information about the page the link leads to)
     * multiple rewards for multiple tasks
 
     With this data we can train a regression model for $Q(s,a)$ function:
@@ -36,10 +38,12 @@ class ExperienceMemory:
     def __init__(self):
         self.data = []  # TODO: more efficient storage
 
-    def add(self, a_t, A_t1, r_t1):
+    def add(self, a_t, A_t1, r_t1) -> None:
+        # if A_t1 is None:
+        #     A_t1 = sp.csr_matrix((0, a_t.shape[1]))
         self.data.append((a_t, A_t1, r_t1))
 
-    def sample(self, k):
+    def sample(self, k: Optional[int]) -> List[Tuple[Any, Any, Any]]:
         if k is None:
             k = len(self.data)
         k = min(k, len(self.data))
@@ -47,18 +51,8 @@ class ExperienceMemory:
         # actions, available_actions, rewards = zip(*sample)
         return sample
 
-    def __len__(self):
+    def clear(self) -> None:
+        self.data.clear()
+
+    def __len__(self) -> int:
         return len(self.data)
-
-
-# class Actions:
-#     """
-#     Actions storage.
-#     """
-#     def __init__(self):
-#         self._data = []
-#
-#     def add(self, a):
-#         self._data.append(a)
-#         return len(self._data)
-
