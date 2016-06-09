@@ -27,7 +27,7 @@ class QLearner:
                  sample_size: int = 300,
                  on_model_changed: Optional[Callable[[], None]]=None,
                  ) -> None:
-        assert 0 <= gamma <= 1
+        assert 0 <= gamma < 1
         self.double_learning = double_learning
         self.steps_before_switch = steps_before_switch
         self.gamma = gamma
