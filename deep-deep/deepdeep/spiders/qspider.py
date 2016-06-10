@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from typing import Dict, Tuple
+from weakref import WeakKeyDictionary
 
 import joblib
 import tqdm
@@ -28,9 +29,62 @@ from deepdeep.utils import log_time
 from deepdeep.vectorizers import LinkVectorizer
 
 
-class Task:
-    def __init__(self):
-        pass
+class FormasaurusGoal:
+    """
+    Parameters
+    ----------
+
+    formtype : str
+        Form type to look for. Allowed values:
+
+        * "search"
+        * "login"
+        * "registration"
+        * "password/login recovery"
+        * "contact/comment"
+        * "join mailing list"
+        * "order/add to cart"
+        * "other"
+
+    threshold : float
+         Probability threshold required to consider the goal acheived
+         for a domain (default: 0.7).
+    """
+    def __init__(self, formtype: str, threshold: float=0.7) -> None:
+        self.formtype = formtype
+        self.threshold = threshold
+        self._cache = WeakKeyDictionary()
+        self._domain_scores = MaxScores()  # domain -> max score
+
+    def get_reward(self, response: TextResponse) -> float:
+        """ Return a reward for a response """
+        if response not in self._cache:
+            if hasattr(response, 'text'):
+                scores = response_max_scores(response)
+                score = scores.get(self.formtype, 0.0)
+                # score = score if score > 0.5 else 0
+            else:
+                score = 0.0
+            self._cache[response] = score
+        return self._cache[response]
+
+    def response_observed(self, response: TextResponse):
+        reward = self.get_reward(response)
+        domain = get_response_domain(response)
+        self._domain_scores.update(domain, reward)
+
+    def is_acheived_for(self, domain):
+        score = self._domain_scores[domain]
+        return score > self.threshold
+
+    def domain_score(self, domain):
+        return self._domain_scores[domain]
+
+    def print_score_stats(self):
+        print("Scores: sum={:8.1}, avg={0.4f}".format(
+            self._domain_scores.sum(), self._domain_scores.avg()
+        ))
+
 
 class QSpider(BaseSpider):
     name = 'q'
@@ -59,9 +113,6 @@ class QSpider(BaseSpider):
     #     "order/add to cart"
     #     "other"
     task = 'password/login recovery'
-
-    # Probability threshold required to consider task finished
-    task_done_threshold = 0.7
 
     # whether to use URL path/query as a feature
     use_urls = 0
@@ -128,6 +179,7 @@ class QSpider(BaseSpider):
         self.replay_sample_size = int(self.replay_sample_size)
         self.checkpoint_interval = int(self.checkpoint_interval)
 
+        self.goal = FormasaurusGoal(formtype=self.task)
         self.Q = QLearner(
             steps_before_switch=self.steps_before_switch,
             replay_sample_size=self.replay_sample_size,
@@ -138,7 +190,6 @@ class QSpider(BaseSpider):
         self.link_vec = LinkVectorizer(use_url=self.use_urls)
         self.total_reward = 0
         self.model_changes = 0
-        self.domain_scores = MaxScores(['score'])
 
         params = json.dumps(self.get_params(), indent=4)
         print(params)
@@ -149,18 +200,10 @@ class QSpider(BaseSpider):
         if (self.model_changes % 1) == 0:
             self.recalculate_request_priorities()
 
-    def get_reward(self, response: TextResponse) -> float:
-        if not hasattr(response, 'text'):
-            return 0.0
-        scores = response_max_scores(response)
-        score = scores.get(self.task, 0.0)
-        return score
-        # return score if score > 0.5 else 0
-
     def close_finished_queues(self):
         for slot in self.scheduler.queue.get_active_slots():
-            score = self.domain_scores[slot]['score']
-            if score > self.task_done_threshold:
+            if self.goal.is_acheived_for(domain=slot):
+                score = self.goal.domain_score(slot)
                 print("Queue {} is closed; score={:0.4f}.".format(slot, score))
                 self.scheduler.close_slot(slot)
 
@@ -169,7 +212,7 @@ class QSpider(BaseSpider):
         self.close_finished_queues()
 
         if 'link' in response.meta:
-            reward = self.get_reward(response)
+            reward = self.goal.get_reward(response)
             self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
                 reward,
                 priority_to_score(response.request.priority),
@@ -199,7 +242,7 @@ class QSpider(BaseSpider):
         links_matrix = self.link_vec.transform(links) if links else None
 
         if 'link_vector' in response.meta:
-            reward = self.get_reward(response)
+            reward = self.goal.get_reward(response)
             self.total_reward += reward
             self.Q.add_experience(
                 a_t=response.meta['link_vector'],
@@ -209,7 +252,7 @@ class QSpider(BaseSpider):
             self.log_stats()
             self.maybe_checkpoint()
             yield self.get_stats_item()
-            self.domain_scores.update(domain, {'score': reward})
+            self.goal.response_observed(response)
 
         if links:
             _links = list(self.deduplicate_links(links, indices=True))
@@ -301,15 +344,7 @@ class QSpider(BaseSpider):
             self.Q.coef_norm(online=True),
             self.Q.coef_norm()
         ))
-
-        scores_sum = sorted(self.domain_scores.sum().items())
-        scores_avg = sorted(self.domain_scores.avg().items())
-        reward_lines = [
-            "{:8.1f}   {:0.4f}   {}".format(tot, avg, k)
-            for ((k, tot), (k, avg)) in zip(scores_sum, scores_avg)
-        ]
-        msg = '\n'.join(reward_lines)
-        print(msg)
+        self.goal.print_score_stats()
 
         stats = self.get_stats_item()
         print("Domains: {domains_open} open, {domains_closed} closed; "
