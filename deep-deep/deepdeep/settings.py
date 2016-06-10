@@ -78,7 +78,7 @@ HTTPCACHE_GZIP = False
 # Enable or disable downloader middlewares
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-   'deepdeep.middlewares.OffsiteDownloaderMiddleware': 543,
+   'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': 543,
 }
 
 # Enable or disable extensions

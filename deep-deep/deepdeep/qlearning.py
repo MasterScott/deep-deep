@@ -1,0 +1,335 @@
+# -*- coding: utf-8 -*-
+"""
+Q-learning estimator with linear function approximation,
+experience replay and double learning.
+
+State-action value :math:`Q(s, a)` function is used. This function
+predicts "return" :math:`R` - a discounted sum of all future rewards after
+following action :math:`a` from state :math:`s`.
+
+.. math::
+
+    R_t = r_{t+1} + \gamma r_{t+2} + \gamma^2 r_{t+3} + \gamma^3 r_{t+4} + ... = \\
+          r_{t+1} + \gamma R_{t+1}
+
+    0 \leq \gamma < 1
+
+
+Q function parameters are learned from "training examples":
+
+* :math:`a_t` action taken (i.e. a feature vector for a link followed);
+* :math:`r_{t+1}` observed reward (scalar value, e.g. whether a form is
+  found or is a page on-topic);
+* a set of actions :math:`A_{t+1}` (i.e. a feature matrix of links) available
+  at this page; next action :math:`a_{t+1} \in A_{t+1}` used for TD updates
+  is chosen from this set. In Q-learning it is a link with the highest
+  :math:`Q(a_{t+1})` score. We need to store all available actions in
+  experience replay memory because Q function changes over time.
+* :math:`s_t` state (feature vector for the page a link is extracted from);
+* :math:`s_{t+1}` state (feature vector for the current page, i.e. a page
+  the link leads to);
+
+With this data we can train a regression model for :math:`Q(s,a)` function
+using any machine learning method. The trick is that instead of true
+return values (which are unknown) in Q learning (and TD methods in general)
+current estimates are used to train the model. Recall that Q function
+is an approximation of R.
+
+.. math::
+
+    R_{predicted} = Q(s_t, a_t)
+
+    R_{observed} = r_{t+1} + \gamma Q(s_{t+1}, a_{t+1}),
+
+The regression model is trained on samples from experience replay memory;
+currently it is not trained online. Experience replay provides several
+benefits:
+
+* data is used more efficiently;
+* training is more stable - pure online training introduces strong biases
+  because examples don't come in random order;
+* a less obvious benefit is that even though we use a first-order
+  approximation :math:`R_{observed} = r_{t+1} + \gamma Q(s_{t+1}, a_{t+1})`,
+  credit can be assigned to states and actions from several steps back if
+  we repeatedly sample from the replay memory. So initially it works
+  like :math:`TD(0)`, but over time, as we keep sampling, it moves towards
+  :math:`TD(1)`. The effect is similar to :math:`TD(\lambda)`.
+
+To stabilize training instead of a single :math:`Q(s, a)` function
+two functions are used:
+
+* target :math:`Q(s, a)` - this function is used for predictions, to define
+  which action to follow; it doesn't change for a specified number of steps;
+* online :math:`Q(s, a)` - this function is being trained using samples from
+  experience replay memory; each N steps parameters of online Q function
+  are copied to the target Q function.
+
+"""
+from __future__ import absolute_import
+import random
+from typing import Callable, List, Tuple, Any, Optional
+
+import numpy as np
+from scipy import sparse
+import sklearn.base
+from sklearn.linear_model import SGDRegressor
+
+from deepdeep.utils import log_time
+
+
+class QLearner:
+    """
+    This class represents :math:`Q(s, a)` function approximated with
+    Linear Regression and knows how to train it using Q-Learning algorithm
+    with Experience Replay and Double Learning.
+
+    Parameters
+    ----------
+    double_learning : bool
+        Whether to use Double Learning (default: True).
+        Currently a simple variant of Double Learning is implemented
+        (http://arxiv.org/abs/1509.06461): instead of using two totally
+        separate Q functions it uses online and target Q functions
+        which we need anyways to stabilize Experience Replay training.
+    steps_before_switch : int
+        Parameters of online Q function are copied to target Q function
+        every `steps_before_switch` steps (default: 100).
+    gamma : float
+        Discounting factor, ``0 <= gamma < 1`` (default: 0.4).
+        Lower values make spider focus on immediate reward::
+
+            gamma     % of credit assigned to n-th previous step  effective steps
+            -----     ------------------------------------------  ---------------
+            0.00      100   0   0   0   0   0   0   0   0   0     1
+            0.05      100   5   0   0   0   0   0   0   0   0     2
+            0.10      100  10   1   0   0   0   0   0   0   0     2
+            0.15      100  15   2   0   0   0   0   0   0   0     2
+            0.20      100  20   4   0   0   0   0   0   0   0     2
+            0.25      100  25   6   1   0   0   0   0   0   0     3
+            0.30      100  30   9   2   0   0   0   0   0   0     3
+            0.35      100  35  12   4   1   0   0   0   0   0     3
+            0.40      100  40  16   6   2   1   0   0   0   0     4
+            0.45      100  45  20   9   4   1   0   0   0   0     4
+            0.50      100  50  25  12   6   3   1   0   0   0     5
+            0.55      100  55  30  16   9   5   2   1   0   0     6
+            0.60      100  60  36  21  12   7   4   2   1   1     6
+            0.65      100  65  42  27  17  11   7   4   3   2     7
+            0.70      100  70  48  34  24  16  11   8   5   4     9
+            0.75      100  75  56  42  31  23  17  13  10   7     10
+            0.80      100  80  64  51  40  32  26  20  16  13     10+
+            0.85      100  85  72  61  52  44  37  32  27  23     10+
+            0.90      100  90  81  72  65  59  53  47  43  38     10+
+            0.95      100  95  90  85  81  77  73  69  66  63     10+
+
+    initial_predictions : float
+        Default :math:`Q(s, a)` value when the model is not fit yet
+        (default : 0.05).
+    replay_sample_size : int
+        How many examples from replay memory to use on each time step
+        (default: 300). At each time step (i.e. with each new experience)
+        ``replay_sample_size`` random examples are fetched from the
+        replay memory, and online :math:`Q(s, a)` function is trained on
+        these examples.
+    fit_interval : int
+        How often to update online :math:`Q(s, a)` function (default: 1).
+        By default, it is updated on each time step; set ``fit_interval``
+        to a higher value to update on each fit_interval-th time step.
+    on_model_changed: callable, optional
+        Function to call when target :math:`Q(s, a)` function is changed.
+
+    """
+    def __init__(self, *,
+                 double_learning: bool = True,
+                 steps_before_switch: int = 100,
+                 gamma: float = 0.4,
+                 initial_predictions: float = 0.05,
+                 replay_sample_size: int = 300,
+                 fit_interval: int = 1,
+                 on_model_changed: Optional[Callable[[], None]]=None
+                 ) -> None:
+        assert 0 <= gamma < 1
+        self.double_learning = double_learning
+        self.steps_before_switch = steps_before_switch
+        self.gamma = gamma
+        self.initial_predictions = initial_predictions
+        self.replay_sample_size = replay_sample_size
+        self.on_model_changed = on_model_changed
+        self.fit_interval = fit_interval
+
+        self.clf_online = SGDRegressor(
+            penalty='l2',
+            average=False,
+            n_iter=1,
+            learning_rate='constant',
+            # loss='epsilon_insensitive',
+            alpha=1e-6,
+            eta0=0.1,
+        )
+
+        self.clf_target = sklearn.base.clone(self.clf_online)  # type: SGDRegressor
+        self.memory = ExperienceMemory()
+        self.t_ = 0
+
+    def add_experience(self, a_t, A_t1, r_t1, s_t=None, s_t1=None) -> None:
+        """
+        Tell QLearner about the observed experience. QLearner stores it
+        to the experience replay memory and updates Q functions.
+        """
+        self.t_ += 1
+        self.memory.add(
+            a_t=a_t,
+            A_t1=A_t1,
+            r_t1=r_t1,
+            s_t=s_t,
+            s_t1=s_t1,
+        )
+
+        if (self.t_ % self.fit_interval) == 0:
+            self.fit_iteration(self.replay_sample_size)
+
+        if (self.t_ % self.steps_before_switch) == 0:
+            self._update_target_clf()
+            if self.on_model_changed is not None:
+                self.on_model_changed()
+
+    def predict(self, A, S=None, online: bool=False) -> np.ndarray:
+        """
+        Compute Q(s, a) function for all state-action pairs.
+
+        Parameters
+        ----------
+
+        A : csr_matrix, shape (n_rows, n_action_features)
+            Feature matrix for actions.
+        S : csr_matrix, shape (n_rows, n_state_features), optional
+            Feature matrix for states.
+        online : bool
+            Whether to use online Q function (default is False, meaning
+            target Q function is used for predictions).
+
+        Returns
+        -------
+        y : array-like, shape (n_rows,)
+            A vector of :math:`Q(s, a)` values.
+
+        """
+        clf = self.clf_target if not online else self.clf_online
+        X = sparse.hstack([A, S]) if S is not None else A
+        if clf.coef_ is None:
+            return np.ones(X.shape[0]) * self.initial_predictions
+        return clf.predict(X)
+
+    def predict_one(self, a, s=None, online=False) -> float:
+        """
+        Compute Q(s, a) function.
+
+        If you have many (s, a) pairs it is better to use :meth:`predict`
+        method because it is faster.
+
+        Parameters
+        ----------
+
+        a : array-like, shape (n_action_features,)
+            Feature matrix for action.
+        s : array-like, shape (n_state_features), optional
+            Feature matrix for state.
+        online : bool
+            Whether to use online Q function (default is False, meaning
+            target Q function is used for predictions).
+
+        Returns
+        -------
+        y : float
+            :math:`Q(s, a)` value
+
+        """
+        x = sparse.hstack([a, s]) if s is not None else a
+        return self.predict(sparse.vstack([x]), online=online)[0]
+
+    @log_time
+    def fit_iteration(self, sample_size: int) -> None:
+        """
+        Update online Q function using random examples from the experience
+        replay memory.
+        """
+        sample = self.memory.sample(sample_size)
+        a_t_list, A_t1_list, r_t1_list, s_t_list, s_t1_list = zip(*sample)
+        rewards = np.asarray(r_t1_list)
+
+        Q_t1_values = np.zeros_like(rewards)
+        for idx, A_t1 in enumerate(A_t1_list or []):
+            if A_t1 is not None and A_t1.shape[0] > 0:
+                scores = self.predict(A_t1, online=True)
+                if self.double_learning:
+                    # This is a simple variant of double learning
+                    # used in http://arxiv.org/abs/1509.06461.
+                    # Instead of using totally separate Q functions
+                    # action is chosen by online Q function, but the score
+                    # is estimated using target Q function.
+                    best_idx = scores.argmax()
+                    a_t1 = A_t1[best_idx]
+                    Q_t1_values[idx] = self.predict_one(a_t1, online=False)
+                else:
+                    Q_t1_values[idx] = scores.max()  # vanilla Q-learning
+
+        X = sparse.vstack(a_t_list)
+        y = rewards + self.gamma * Q_t1_values
+        self.clf_online.partial_fit(X, y)
+
+    def _update_target_clf(self):
+        trained_params = [
+            't_',
+            'coef_',
+            'intercept_',
+            'average_coef_',
+            'average_intercept_',
+            'standard_coef_',
+            'standard_intercept_',
+        ]
+        for attr in trained_params:
+            if not hasattr(self.clf_online, attr):
+                continue
+            data = getattr(self.clf_online, attr)
+            if hasattr(data, 'copy'):
+                data = data.copy()
+            setattr(self.clf_target, attr, data)
+
+    def coef_norm(self, online: bool=True) -> float:
+        """ Return L2 norm of classifier weights """
+        clf = self.clf_target if not online else self.clf_online
+        if clf.coef_ is None:
+            return 0
+        return np.sqrt((clf.coef_ ** 2).sum())
+
+    def __getstate__(self):
+        dct = self.__dict__.copy()
+        del dct['on_model_changed']
+        return dct
+
+
+class ExperienceMemory:
+    """
+    Experience replay memory.
+    Currently it just keeps all examples in an unbound in-memory array.
+    """
+    def __init__(self):
+        self.data = []  # TODO: more efficient storage
+
+    def add(self, a_t, A_t1, r_t1, s_t=None, s_t1=None) -> None:
+        """ Add an example to the replay memory """
+        self.data.append((a_t, A_t1, r_t1, s_t, s_t1))
+
+    def sample(self, k: Optional[int]) -> List[Tuple[Any, Any, Any, Any, Any]]:
+        """
+        Return no more than ``k`` random examples from the memory.
+        """
+        if k is None:
+            k = len(self.data)
+        k = min(k, len(self.data))
+        return random.sample(self.data, k)
+
+    def clear(self) -> None:
+        self.data.clear()
+
+    def __len__(self) -> int:
+        return len(self.data)

@@ -5,19 +5,15 @@ from typing import Dict, Tuple
 
 import joblib
 import tqdm
-from sklearn.feature_extraction.text import HashingVectorizer
-from sklearn.pipeline import make_union
-from formasaurus.text import normalize
 import scrapy
 from scrapy.http import TextResponse
 from scrapy.statscollectors import StatsCollector
-from scrapy.utils.url import canonicalize_url
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
     RequestsPriorityQueue,
-    FLOAT_PRIORITY_MULTIPLIER
-)
+    score_to_priority,
+    priority_to_score)
 from deepdeep.scheduler import Scheduler
 from deepdeep.spiders._base import BaseSpider
 from deepdeep.utils import (
@@ -27,46 +23,14 @@ from deepdeep.utils import (
     MaxScores,
 )
 from deepdeep.score_pages import response_max_scores
-from deepdeep.rl.learner import QLearner
+from deepdeep.qlearning import QLearner
 from deepdeep.utils import log_time
+from deepdeep.vectorizers import LinkVectorizer
 
 
-def _link_inside_text(link: Dict):
-    text = link.get('inside_text', '')
-    title = link.get('attrs', {}).get('title', '')
-    return normalize(text + ' ' + title)
-
-
-def _clean_url(link: Dict):
-    return url_path_query(canonicalize_url(link.get('url')))
-
-
-def LinkVectorizer(use_url: bool=False):
-    text_vec = HashingVectorizer(
-        preprocessor=_link_inside_text,
-        n_features=1024*1024,
-        binary=True,
-        norm='l2',
-        # ngram_range=(1, 2),
-        analyzer='char',
-        ngram_range=(3, 5),
-    )
-    if not use_url:
-        return text_vec
-
-    url_vec = HashingVectorizer(
-        preprocessor=_clean_url,
-        n_features=1024*1024,
-        binary=True,
-        analyzer='char',
-        ngram_range=(4,5),
-    )
-    return make_union(text_vec, url_vec)
-
-
-def score_to_priority(score: float) -> int:
-    return int(score * FLOAT_PRIORITY_MULTIPLIER)
-
+class Task:
+    def __init__(self):
+        pass
 
 class QSpider(BaseSpider):
     name = 'q'
@@ -208,7 +172,7 @@ class QSpider(BaseSpider):
             reward = self.get_reward(response)
             self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
                 reward,
-                response.request.priority / FLOAT_PRIORITY_MULTIPLIER,
+                priority_to_score(response.request.priority),
                 response.url,
                 response.meta['link'].get('inside_text'),
             ))
@@ -259,7 +223,6 @@ class QSpider(BaseSpider):
                         'link_vector': v,
                         'link': link,  # FIXME: turn it off for production
                         'scheduler_slot': domain,
-                        'domain': domain,  # stay on-domain
                     }
                     priority = score_to_priority(score)
                     req = scrapy.Request(link['url'], priority=priority, meta=meta)
@@ -398,4 +361,3 @@ class QSpider(BaseSpider):
             '_params': self.get_params(),
         }
         joblib.dump(data, str(path), compress=3)
-

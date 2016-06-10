@@ -14,7 +14,7 @@ from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
 from formasaurus.utils import get_domain
 
 from deepdeep.links import extract_link_dicts
-from deepdeep.middlewares import offdomain_request_dropped
+from deepdeep.downloadermiddlewares import offdomain_request_dropped
 
 
 class BaseSpider(scrapy.Spider):

@@ -30,6 +30,14 @@ from deepdeep.utils import softmax
 FLOAT_PRIORITY_MULTIPLIER = 10000
 
 
+def score_to_priority(score: float) -> int:
+    return int(score * FLOAT_PRIORITY_MULTIPLIER)
+
+
+def priority_to_score(prio: int) -> float:
+    return prio / FLOAT_PRIORITY_MULTIPLIER
+
+
 class QueueClosed(Exception):
     pass
 
@@ -52,11 +60,11 @@ class RequestsPriorityQueue:
 
     REMOVED = object()
 
-    REMOVED_PRIORITY = 10000 * FLOAT_PRIORITY_MULTIPLIER
-    EMPTY_PRIORITY = -10000 * FLOAT_PRIORITY_MULTIPLIER
+    REMOVED_PRIORITY = score_to_priority(10000)
+    EMPTY_PRIORITY = score_to_priority(-10000)
 
     def __init__(self, fifo=True):
-        self.entries = []  # type: List[Tuple[int, int, Any]]
+        self.entries = []  # type: List[List[int, int, Any]]
         step = 1 if fifo else -1
         self.counter = itertools.count(step=step)
 
