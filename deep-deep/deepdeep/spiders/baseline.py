@@ -10,7 +10,7 @@ from deepdeep.utils import (
     set_request_domain,
     decreasing_priority_iter,
 )
-from deepdeep.spiders.base import BaseSpider
+from deepdeep.spiders._base import BaseSpider
 from deepdeep.score_pages import forms_info, max_scores
 
 
@@ -29,27 +29,31 @@ class CrawlAllSpider(BaseSpider):
     custom_settings = {
         'DEPTH_LIMIT': 1,  # override it using -s DEPTH_LIMIT=2
         'DEPTH_PRIORITY': 1,
+        'SPIDER_MIDDLEWARES': {
+            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
+        }
     }
 
     ALLOWED_ARGUMENTS = {'shuffle', 'heuristic'} | BaseSpider.ALLOWED_ARGUMENTS
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.heuristic_re = re.compile("(regi|join|create|sign|account|user|login)")
+        self.heuristic_re = re.compile("(regi|join|create|sign|account|user|login|recover|password)")
         self.heuristic = int(self.heuristic)
         self.shuffle = int(self.shuffle)
 
     def parse(self, response):
         self.increase_response_count()
+        node_id = response.meta['node_id']
 
         if not hasattr(response, 'text'):
             # can't decode the response
+            # XXX: it should be set in midleware, why doesn't it work?
+            # self.G[node_id]['ok'] = False
             return
 
         res = forms_info(response)
-
-        yield {
-            'url': response.url,
+        self.G.node[node_id]['info'] = {
             'depth': response.meta['depth'],
             'forms': res,
             'scores': max_scores(res),
@@ -68,22 +72,28 @@ class CrawlAllSpider(BaseSpider):
         When shuffle=True, links are selected at random.
         When prioritize_re is not None, links which URLs follow specified
         regexes are prioritized.
+
+        Raw link features are stored as edge data.
         """
 
         # limit crawl to the first domain
         domain = get_response_domain(response)
-        urls = [link['url'] for link in self.iter_link_dicts(response, domain)]
+        links = list(self.iter_link_dicts(response, domain))
 
         if shuffle:
-            random.shuffle(urls)
+            random.shuffle(links)
 
-        for priority, url in zip(decreasing_priority_iter(), urls):
+        for priority, link in zip(decreasing_priority_iter(), links):
+            url = link['url']
+
             if prioritize_re:
                 s = prioritize_re.search
                 p = urlsplit(url)
                 if s(p.path) or s(p.query) or s(p.fragment):
                     priority = 1
 
-            req = scrapy.Request(url, priority=priority)
+            req = scrapy.Request(url, priority=priority, meta={
+                'edge_data': link,
+            })
             set_request_domain(req, domain)
             yield req

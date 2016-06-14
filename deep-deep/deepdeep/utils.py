@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 import itertools
+import functools
 import collections
 from urllib.parse import unquote_plus
 from urllib.parse import urlsplit
 
 import numpy as np
+import time
+
 from formasaurus.utils import get_domain
 
 
@@ -69,11 +72,6 @@ def url_path_query(url):
     return unquote_plus(p.path + '?' + p.query).lower()
 
 
-def ensure_folder_exists(path):
-    """ Create folder `path` if necessary """
-    os.makedirs(path, exist_ok=True)
-
-
 def softmax(z, t=1.0):
     """
     Softmax function with temperature.
@@ -97,40 +95,55 @@ def softmax(z, t=1.0):
 
 class MaxScores:
     """
-    >>> s = MaxScores(['x', 'y'])
-    >>> s.update("foo", {"x": 0.1, "y": 0.3})
-    >>> s.update("foo", {"x": 0.01, "y": 0.4})
-    >>> s.update("bar", {"x": 0.8})
-    >>> s.sum() == {'x': 0.9, 'y': 0.4}
-    True
-    >>> s.avg() == {'x': 0.45, 'y': 0.2}
-    True
+    >>> s = MaxScores()
+    >>> s.update("foo", 0.2)
+    >>> s.update("foo", 0.1)
+    >>> s.update("bar", 0.5)
+    >>> s.update("bar", 0.6)
+    >>> s['unknown']
+    0
+    >>> s['foo']
+    0.2
+    >>> s['bar']
+    0.6
+    >>> s.sum()
+    0.8
+    >>> s.avg()
+    0.4
     >>> len(s)
     2
     """
-    def __init__(self, classes):
-        self.classes = classes
-        self._zero_scores = {key: 0.0 for key in self.classes}
-        self.scores = collections.defaultdict(lambda: self._zero_scores.copy())
+    def __init__(self, default=0):
+        self.default = default
+        self.scores = collections.defaultdict(lambda: default)
 
-    def update(self, domain, scores):
-        cur_scores = self.scores[domain]
-        for k, v in scores.items():
-            cur_scores[k] = max(cur_scores[k], v)
+    def update(self, key, value):
+        self.scores[key] = max(self.scores[key], value)
 
     def sum(self):
-        return {
-            k: sum(v[k] for v in self.scores.values())
-            for k in self.classes
-        }
+        return sum(self.scores.values())
 
     def avg(self):
-        if not self.scores:
-            return self._zero_scores.copy()
-        return {k: v/len(self.scores) for k, v in self.sum().items()}
+        if len(self) == 0:
+            return 0
+        return self.sum() / len(self)
 
-    def __getitem__(self, domain):
-        return self.scores[domain]
+    def __getitem__(self, key):
+        if key not in self.scores:
+            return self.default
+        return self.scores[key]
 
     def __len__(self):
         return len(self.scores)
+
+
+def log_time(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            end = time.time()
+            print("{} took {:0.4f}s".format(func, end-start))
+    return wrapper

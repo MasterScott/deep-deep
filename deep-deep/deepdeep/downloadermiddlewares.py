@@ -12,8 +12,8 @@ offdomain_request_dropped = object()
 
 class OffsiteDownloaderMiddleware:
     """
-    This middleware filters out requests if they are not to the same domain
-    as specified in request.meta['domain'].
+    This downloader middleware filters out requests if they are not to the
+    same domain as specified in request.meta['domain'].
     """
     def __init__(self, signals):
         self.signals = signals

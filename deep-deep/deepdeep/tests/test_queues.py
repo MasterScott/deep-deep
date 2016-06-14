@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 import scrapy
 
-from deepdeep.scheduler import (
-    RequestsPriorityQueue,
-    DomainFormFinderRequestsQueue,
-)
+from deepdeep.scheduler import Scheduler
+from deepdeep.queues import RequestsPriorityQueue
 
 
 def test_request_priority_queue():

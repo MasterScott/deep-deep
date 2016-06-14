@@ -1,443 +1,398 @@
 # -*- coding: utf-8 -*-
-import itertools
 import json
-import os
-import time
-import random
-import datetime
+from pathlib import Path
+from typing import Dict, Tuple
+from weakref import WeakKeyDictionary
 
-import networkx as nx
-from twisted.internet.task import LoopingCall
-from sklearn.linear_model import SGDRegressor
-from sklearn.feature_extraction import DictVectorizer
+import joblib
+import tqdm
 import scrapy
-from scipy import sparse
+from scrapy.http import TextResponse
+from scrapy.statscollectors import StatsCollector
 
-from deepdeep.queues import BalancedPriorityQueue, RequestsPriorityQueue, \
-    FLOAT_PRIORITY_MULTIPLIER
-from deepdeep.spiders.base import BaseSpider
+from deepdeep.queues import (
+    BalancedPriorityQueue,
+    RequestsPriorityQueue,
+    score_to_priority,
+    priority_to_score)
+from deepdeep.scheduler import Scheduler
+from deepdeep.spiders._base import BaseSpider
 from deepdeep.utils import (
     get_response_domain,
     set_request_domain,
-    ensure_folder_exists,
+    url_path_query,
     MaxScores,
-    dict_subtract)
-from deepdeep import score_links
-from deepdeep.score_pages import (
-    available_form_types,
-    get_constant_scores,
-    response_max_scores,
 )
+from deepdeep.score_pages import response_max_scores
+from deepdeep.qlearning import QLearner
+from deepdeep.utils import log_time
+from deepdeep.vectorizers import LinkVectorizer
 
 
-class TDRegressor:
+class FormasaurusGoal:
     """
-    Regression model for Q function. It uses Temporal Difference Learning.
+    Parameters
+    ----------
 
-    FIXME: it should work on vectors of observations.
+    formtype : str
+        Form type to look for. Allowed values:
+
+        * "search"
+        * "login"
+        * "registration"
+        * "password/login recovery"
+        * "contact/comment"
+        * "join mailing list"
+        * "order/add to cart"
+        * "other"
+
+    threshold : float
+         Probability threshold required to consider the goal acheived
+         for a domain (default: 0.7).
     """
-    def __init__(self, gamma):
-        self.gamma = gamma
-        self.Q = SGDRegressor(
-            epsilon=1.0,
-            shuffle=False,
-            learning_rate="constant",
-            n_iter=1,
-            average=True,
-        )
-        self.action_vectorizer = score_links.get_vectorizer(
-            use_hashing=True, use_domain=False
-        )
-        self.state_vectorizer = DictVectorizer()
-        self.state_vectorizer.fit([get_constant_scores(0.0)])
-        # self.vec = FeatureUnion([self.action_vectorizer, self.state_vectorier])
+    def __init__(self, formtype: str, threshold: float=0.7) -> None:
+        self.formtype = formtype
+        self.threshold = threshold
+        self._cache = WeakKeyDictionary()
+        self._domain_scores = MaxScores()  # domain -> max score
 
-    def update(self, s_t, a_t, r_t1, s_t1, a_t1):
-        X_t = self._vectorize(s_t, a_t)
-        if a_t1 is None or self.Q.coef_ is None:
-            future_reward = 0.0  # be optimistic
-        else:
-            X_t1 = self._vectorize(s_t1, a_t1)
-            future_reward = self.gamma * self.Q.predict(X_t1)[0]
+    def get_reward(self, response: TextResponse) -> float:
+        """ Return a reward for a response """
+        if response not in self._cache:
+            if hasattr(response, 'text'):
+                scores = response_max_scores(response)
+                score = scores.get(self.formtype, 0.0)
+                # score = score if score > 0.5 else 0
+            else:
+                score = 0.0
+            self._cache[response] = score
+        return self._cache[response]
 
-        R_observed = r_t1 + future_reward
-        # print(self.predict(s_t, a_t), R_observed)
-        print('Return: predicted={:0.3f}, observed={:0.3f}, immediate={:0.3f}, future={:0.3f}'.format(
-            self.predict(s_t, a_t),
-            R_observed,
-            r_t1,
-            future_reward,
+    def response_observed(self, response: TextResponse):
+        reward = self.get_reward(response)
+        domain = get_response_domain(response)
+        self._domain_scores.update(domain, reward)
+
+    def is_acheived_for(self, domain):
+        score = self._domain_scores[domain]
+        return score > self.threshold
+
+    def domain_score(self, domain):
+        return self._domain_scores[domain]
+
+    def print_score_stats(self):
+        print("Scores: sum={:8.1f}, avg={:0.4f}".format(
+            self._domain_scores.sum(), self._domain_scores.avg()
         ))
-        # print(s_t, a_t, r_t1, s_t1, a_t1)
-        sample_weight = 1.0 # 20.0 if R_observed > 0.5 else 1.0
-        self.Q.partial_fit(X_t, [R_observed], sample_weight=[sample_weight])
-
-    def predict(self, s, a):
-        if self.Q.coef_ is None:
-            return 0.0
-        X = self._vectorize(s, a)
-        return self.Q.predict(X)[0]
-
-    def _vectorize(self, s, a):
-        X_s = self.state_vectorizer.transform([s])
-        X_a = self.action_vectorizer.transform([a])
-        return sparse.hstack([X_s, X_a]).tocsr()
 
 
 class QSpider(BaseSpider):
-    """
-    Spider which uses Q-Learning to select links.
-    It crawls a a list of URLs using adaptive algorithm
-    and stores intermediate crawl graphs to ./checkpoints folder.
-
-    Example::
-
-        scrapy crawl q -a seeds_url=./urls.csv -L INFO
-
-    """
     name = 'q'
+
+    _ARGS = {
+        'double', 'task', 'use_urls', 'eps', 'balancing_temperature', 'gamma',
+        'replay_sample_size', 'steps_before_switch',
+        'checkpoint_path', 'checkpoint_interval',
+    }
+    ALLOWED_ARGUMENTS = _ARGS | BaseSpider.ALLOWED_ARGUMENTS
     custom_settings = {
-        'DEPTH_LIMIT': 5,
-        # 'DEPTH_PRIORITY': 1,
-        # 'CONCURRENT_REQUESTS':
+        'DEPTH_LIMIT': 10,
+        # 'SPIDER_MIDDLEWARES': {
+        #     'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
+        # }
     }
+    initial_priority = score_to_priority(5)
 
-    # Crawler arguments
-    replay_N = 0 # how many links to take for experience replay
-    epsilon = 0  # probability of choosing a random link instead of
-                 # the the most promising
-    gamma = 0.5  # discounting factor
+    # Goal. Allowed values:
+    #     "search"
+    #     "login"
+    #     "registration"
+    #     "password/login recovery"
+    #     "contact/comment"
+    #     "join mailing list"
+    #     "order/add to cart"
+    #     "other"
+    task = 'password/login recovery'
 
-    # intervals for periodic tasks
-    stats_interval = 10
-    checkpoint_interval = 60*10
-    update_link_scores_interval = 30
+    # whether to use URL path/query as a feature
+    use_urls = 0
 
-    # autogenerated crawl name
-    crawl_id = "q" + str(datetime.datetime.now())
+    # use Double Learning
+    double = 1
 
-    ALLOWED_ARGUMENTS = BaseSpider.ALLOWED_ARGUMENTS | {
-        'replay_N',
-        'epsilon',
-        'gamma',
-        'crawl_id',
-    }
+    # probability of selecting a random request
+    eps = 0.2
 
-    # crawl graph
-    G = None
+    # 0 <= gamma < 1; lower values make spider focus on immediate reward.
+    #
+    #     gamma     % of credit assigned to n-th previous step  effective steps
+    #     -----     ------------------------------------------  ---------------
+    #     0.00      100   0   0   0   0   0   0   0   0   0     1
+    #     0.05      100   5   0   0   0   0   0   0   0   0     2
+    #     0.10      100  10   1   0   0   0   0   0   0   0     2
+    #     0.15      100  15   2   0   0   0   0   0   0   0     2
+    #     0.20      100  20   4   0   0   0   0   0   0   0     2
+    #     0.25      100  25   6   1   0   0   0   0   0   0     3
+    #     0.30      100  30   9   2   0   0   0   0   0   0     3
+    #     0.35      100  35  12   4   1   0   0   0   0   0     3
+    #     0.40      100  40  16   6   2   1   0   0   0   0     4
+    #     0.45      100  45  20   9   4   1   0   0   0   0     4
+    #     0.50      100  50  25  12   6   3   1   0   0   0     5
+    #     0.55      100  55  30  16   9   5   2   1   0   0     6
+    #     0.60      100  60  36  21  12   7   4   2   1   1     6
+    #     0.65      100  65  42  27  17  11   7   4   3   2     7
+    #     0.70      100  70  48  34  24  16  11   8   5   4     9
+    #     0.75      100  75  56  42  31  23  17  13  10   7     10
+    #     0.80      100  80  64  51  40  32  26  20  16  13     10+
+    #     0.85      100  85  72  61  52  44  37  32  27  23     10+
+    #     0.90      100  90  81  72  65  59  53  47  43  38     10+
+    #     0.95      100  95  90  85  81  77  73  69  66  63     10+
+    #
+    gamma = 0.4
+
+    # softmax temperature for domain balancer;
+    # higher values => more randomeness in domain selection.
+    balancing_temperature = 1.0
+
+    # parameters of online Q function are copied to target Q function
+    # every `steps_before_switch` steps
+    steps_before_switch = 100
+
+    # how many examples to fetch from experience replay on each iteration
+    replay_sample_size = 300
+
+    # current model is saved every checkpoint_interval timesteps
+    checkpoint_interval = 1000
+
+    # Where to store checkpoints. By default they are not stored.
+    checkpoint_path = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.replay_N = int(self.replay_N)
-        self.epsilon = float(self.epsilon)
+
+        self.eps = float(self.eps)
+        self.balancing_temperature = float(self.balancing_temperature)
         self.gamma = float(self.gamma)
+        self.use_urls = bool(int(self.use_urls))
+        self.double = bool(int(self.double))
+        self.steps_before_switch = int(self.steps_before_switch)
+        self.replay_sample_size = int(self.replay_sample_size)
+        self.checkpoint_interval = int(self.checkpoint_interval)
 
-        self.params = {
-            'crawl_id': self.crawl_id,
-            'replay_N': self.replay_N,
-            'epsilon': self.epsilon,
-            'gamma': self.gamma,
-            # 'custom_settings': self.custom_settings,
-        }
+        self.goal = FormasaurusGoal(formtype=self.task)
+        self.Q = QLearner(
+            steps_before_switch=self.steps_before_switch,
+            replay_sample_size=self.replay_sample_size,
+            gamma=self.gamma,
+            double_learning=self.double,
+            on_model_changed=self.on_model_changed,
+        )
+        self.link_vec = LinkVectorizer(use_url=self.use_urls)
+        self.total_reward = 0
+        self.model_changes = 0
 
-        self.logger.info("CRAWL {}".format(self.params))
+        params = json.dumps(self.get_params(), indent=4)
+        print(params)
+        (Path(self.checkpoint_path)/"params.json").write_text(params)
 
-        self.G = nx.DiGraph(name='Crawl Graph')
-        self.node_ids = itertools.count()
+    def on_model_changed(self):
+        self.model_changes += 1
+        if (self.model_changes % 1) == 0:
+            self.recalculate_request_priorities()
 
-        self.seen_urls = set()
-        # self._replay_node_ids = set()
-        self._scores_recalculated_at = 0
-        self.domain_scores = MaxScores(available_form_types())
+    def close_finished_queues(self):
+        for slot in self.scheduler.queue.get_active_slots():
+            if self.goal.is_acheived_for(domain=slot):
+                score = self.goal.domain_score(slot)
+                print("Queue {} is closed; score={:0.4f}.".format(slot, score))
+                self.scheduler.close_slot(slot)
 
-        self.log_task = LoopingCall(self.print_stats)
-        self.log_task.start(self.stats_interval, now=False)
-        self.checkpoint_task = LoopingCall(self.checkpoint)
-        self.checkpoint_task.start(self.checkpoint_interval, now=False)
+    def parse(self, response):
+        self.increase_response_count()
+        self.close_finished_queues()
 
-        self.rl_model = TDRegressor(gamma=self.gamma)
-        self.update_link_scores_task = LoopingCall(self.update_request_priorities)
-        self.update_link_scores_task.start(self.update_link_scores_interval, now=False)
+        if 'link' in response.meta:
+            reward = self.goal.get_reward(response)
+            self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
+                reward,
+                priority_to_score(response.request.priority),
+                response.url,
+                response.meta['link'].get('inside_text'),
+            ))
 
-        ensure_folder_exists(self._data_path(''))
-        with open(self._data_path('info.json'), 'w') as f:
-            json.dump(self.params, f)
+        if not hasattr(response, 'text'):
+            if 'link_vector' in response.meta:
+                # learn to avoid non-html responses
+                self.Q.add_experience(
+                    a_t=response.meta['link_vector'],
+                    A_t1=None,
+                    r_t1=0
+                )
+                self.log_stats()
+                self.maybe_checkpoint()
+                yield self.get_stats_item()
+            return
 
-        self.logger.info("Crawl {} started".format(self.crawl_id))
+        domain = get_response_domain(response)
+        links = list(self.iter_link_dicts(
+            response=response,
+            domain=domain,
+            deduplicate=False
+        ))
+        links_matrix = self.link_vec.transform(links) if links else None
+
+        if 'link_vector' in response.meta:
+            reward = self.goal.get_reward(response)
+            self.total_reward += reward
+            self.Q.add_experience(
+                a_t=response.meta['link_vector'],
+                A_t1=links_matrix,
+                r_t1=reward
+            )
+            self.log_stats()
+            self.maybe_checkpoint()
+            yield self.get_stats_item()
+            self.goal.response_observed(response)
+
+        if links:
+            _links = list(self.deduplicate_links(links, indices=True))
+            if _links:
+                indices, links_to_follow = zip(*_links)
+                links_to_follow_matrix = links_matrix[list(indices)]
+                scores = self.Q.predict(links_to_follow_matrix)
+
+                for link, v, score in zip(links_to_follow, links_to_follow_matrix, scores):
+                    meta = {
+                        'link_vector': v,
+                        'link': link,  # FIXME: turn it off for production
+                        'scheduler_slot': domain,
+                    }
+                    priority = score_to_priority(score)
+                    req = scrapy.Request(link['url'], priority=priority, meta=meta)
+                    set_request_domain(req, domain)
+                    if score > 0.5:
+                        self._log_promising_link(link, score)
+                    yield req
 
     def get_scheduler_queue(self):
         """
-        This method is called by scheduler to create a new queue.
+        This method is called by deepdeep.scheduler.Scheduler
+        to create a new queue.
         """
         def new_queue(domain):
             return RequestsPriorityQueue(fifo=True)
-        return BalancedPriorityQueue(queue_factory=new_queue, eps=self.epsilon)
-
-    def parse(self, response):
-        """ Main spider entry point - parse the response """
-        self.increase_response_count()
-        node_id = self.update_response_node(response)
-
-        if self.G.node[node_id]['ok']:
-            # don't send requests from failed responses
-            yield from self.generate_out_nodes(response, node_id)
-
-        self.learn_from_response(node_id, response)
-
-        # TODO:
-        # self.update_classifiers_bootstrapped(node_id)
-
-    def learn_from_response(self, node_id, response):
-        """ Learn from response """
-        domain = get_response_domain(response)
-        observed_scores = self.store_observed_scores(node_id, response)
-        s_t = self.get_domain_state(domain).copy()
-        self.update_domain_state(node_id, response)
-        s_t1 = self.get_domain_state(domain)
-
-        r_t1 = sum(max(v, 0.0) for k, v in dict_subtract(observed_scores, s_t).items())
-        print("REWARD: {:0.2f}  {}".format(r_t1, response.url))
-
-        a_t = self._get_action(node_id)
-        if not a_t:
-            return
-
-        if r_t1 > 0.1:
-            self.update_domain_request_priorities(domain)
-
-        a_t1 = None
-        next_req = self.scheduler_queue.get_domain_queue(domain).next_request
-        if next_req:
-            next_node_id = next_req.meta.get('node_id')
-            if next_node_id is not None:
-                a_t1 = self._get_action(next_node_id)
-
-        self.rl_model.update(s_t, a_t, r_t1, s_t1, a_t1)
-
-    def get_request_priority(self, domain, node_id):
-        s = self.get_domain_state(domain)
-        a = self._get_action(node_id)
-        return int(self.rl_model.predict(s, a) * FLOAT_PRIORITY_MULTIPLIER)
-
-    def _get_action(self, node_id):
-        incoming_link_dicts = list(self._iter_incoming_link_dicts(node_id))
-
-        if not incoming_link_dicts:
-            return  # don't learn from seed URLs. XXX: should we?
-
-        # Because of the way we crawl there is always either 0 or 1
-        # incoming links.
-        return incoming_link_dicts[0]
-
-    def update_response_node(self, response):
-        """
-        Update crawl graph with information about the received response.
-        Return node_id of the node which corresponds to this response.
-        """
-        node_id = response.meta.get('node_id')
-
-        # 1. Handle responses for seed requests (they don't yet have node_id)
-        is_seed_url = node_id is None
-        if is_seed_url:
-            node_id = next(self.node_ids)
-
-        # 2. Update node with observed information
-        ok = response.status == 200 and hasattr(response, 'text')
-
-        self.G.add_node(
-            node_id,
-            url=response.url,
-            visited=True,
-            ok=ok,
-            response_id=self.response_count,
+        return BalancedPriorityQueue(
+            queue_factory=new_queue,
+            eps=self.eps,
+            balancing_temperature=self.balancing_temperature,
         )
-
-        # if not is_seed_url:
-        #     # don't add initial nodes to replay because there is
-        #     # no incoming links for such nodes
-        #     self._replay_node_ids.add(node_id)
-
-        return node_id
-
-    def store_observed_scores(self, node_id, response):
-        """
-        Store observed information about node in the crawl graph.
-        """
-        # extract forms from response, classify them and get scores
-        node = self.G.node[node_id]
-        ok = node['ok']
-        if ok:
-            observed_scores = response_max_scores(response)
-        else:
-            observed_scores = get_constant_scores(0.0)
-        self.G.add_node(node_id, scores=observed_scores)
-        return observed_scores
-
-    def get_domain_state(self, domain):
-        return self.domain_scores[domain]
-
-    def update_domain_state(self, node_id, response):
-        node = self.G.node[node_id]
-        domain = get_response_domain(response)
-        scores = node['scores']
-        if not scores:
-            return
-        self.domain_scores.update(domain, scores)
-        # self.scheduler_queue.update_observed_scores(response, scores)
-
-    def on_offdomain_request_dropped(self, request):
-        super().on_offdomain_request_dropped(request)
-
-        node_id = request.meta.get('node_id')
-        if not node_id:
-            self.logger.warn("Request without node_id dropped: {}".format(request))
-            return
-
-        self.G.add_node(
-            node_id,
-            visited=True,
-            ok=False,
-            scores=get_constant_scores(0.0),   # FIXME: it shouldn't be here?
-            response_id=self.response_count,
-        )
-        # self._replay_node_ids.add(node_id)
 
     @property
-    def scheduler_queue(self):
-        return self.crawler.engine.slot.scheduler.queue
+    def scheduler(self) -> Scheduler:
+        return self.crawler.engine.slot.scheduler
 
-    def update_request_priorities(self, min_response_count=None):
-        """ Update priorities of all requests in a frontier """
-        if min_response_count is None:
-            min_response_count = max(500, len(self.domain_scores))
-
-        if min_response_count:
-            interval = self.response_count - self._scores_recalculated_at
-            if interval <= min_response_count:
-                self.logger.info(
-                    "Fewer than {} classifier updates ({}); not re-classifying links.".format(
-                    min_response_count, interval
-                ))
-                return
-
-        self.logger.info("Updating request priorities...")
-
-        for domain in self.scheduler_queue.get_domains():
-            self.update_domain_request_priorities(domain)
-
-        self.logger.info("Updating request priorities: done.")
-        self._scores_recalculated_at = self.response_count
-
-    def update_domain_request_priorities(self, domain):
-        """ Update all request priorities for a single domain """
-        def _get_priority(request):
-            node_id = request.meta.get('node_id')
-            if not node_id:
+    @log_time
+    def recalculate_request_priorities(self):
+        # TODO: vectorize
+        def request_priority(request: scrapy.Request):
+            link_vector = request.meta.get('link_vector', None)
+            if link_vector is None:
                 return request.priority
-            return self.get_request_priority(domain, node_id)
+            score = self.Q.predict_one(link_vector)
+            if score > 0.5:
+                self._log_promising_link(request.meta['link'], score)
+            return score_to_priority(score)
 
-        queue = self.scheduler_queue.get_domain_queue(domain)
-        queue.update_all_priorities(_get_priority)
+        for slot in tqdm.tqdm(self.scheduler.queue.get_active_slots()):
+            queue = self.scheduler.queue.get_queue(slot)
+            queue.update_all_priorities(request_priority)
 
-    def generate_out_nodes(self, response, this_node_id):
-        """
-        Extract links from the response and add nodes and edges to crawl graph.
-        Returns an iterator of scrapy.Request objects.
-        """
+    def _log_promising_link(self, link, score):
+        self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
+            score, link['url'], link['inside_text']
+        ))
 
-        # Extract in-domain links and their features
-        domain = get_response_domain(response)
-        links = list(self.iter_link_dicts(response, domain))
-        random.shuffle(links)
-
-        # Generate nodes, edges and requests based on link information
-        for link in links:
-            url = link['url']
-
-            # generate nodes and edges
-            node_id = next(self.node_ids)
-            self.G.add_node(
-                node_id,
-                url=url,
-                visited=False,
-                ok=None,
-                # scores=None,
-                response_id=None,
-            )
-            self.G.add_edge(this_node_id, node_id, link=link)
-
-            priority = self.get_request_priority(domain, node_id)
-
-            # generate Scrapy request
-            request = scrapy.Request(url, meta={
-                'handle_httpstatus_list': [403, 404, 500],
-                'node_id': node_id,
-            }, priority=priority)
-            set_request_domain(request, domain)
-            yield request
-
-    def _iter_incoming_link_dicts(self, node_id):
-        for prev_id in self.G.predecessors_iter(node_id):
-            yield self.G.edge[prev_id][node_id]['link']
-
-    def print_stats(self):
-        active_downloads = len(self.crawler.engine.downloader.active)
-        self.logger.info("Active downloads: {}".format(active_downloads))
-        msg = "Crawl graph: {} nodes ({} visited), {} edges, {} domains".format(
-            self.G.number_of_nodes(),
-            self.response_count,
-            self.G.number_of_edges(),
-            len(self.domain_scores)
-        )
-        self.logger.info(msg)
-
-        scores_sum = sorted(self.domain_scores.sum().items())
-        scores_avg = sorted(self.domain_scores.avg().items())
-        reward_lines = [
-            "{:8.1f}   {:0.4f}   {}".format(tot, avg, k)
-            for ((k, tot), (k, avg)) in zip(scores_sum, scores_avg)
+    def log_stats(self):
+        examples = [
+            ['forgot password', 'http://example.com/wp-login.php?action=lostpassword'],
+            ['registration', 'http://example.com/register'],
+            ['register', 'http://example.com/reg'],
+            ['sign up', 'http://example.com/users/new'],
+            ['my account', 'http://example.com/account/my?sess=GJHFHJS21123'],
+            ['my little pony', 'http://example.com?category=25?sort=1&'],
+            ['comment', 'http://example.com/blog?p=2'],
+            ['sign in', 'http://example.com/users/login'],
+            ['login', 'http://example.com/users/login'],
+            ['forum', 'http://example.com/mybb'],
+            ['forums', 'http://example.com/mybb'],
+            ['sadhjgrhgsfd', 'http://example.com/new-to-exhibiting/discover-your-stand-position/'],
+            ['забыли пароль', 'http://example.com/users/send-password/'],
         ]
-        msg = '\n'.join(reward_lines)
-        self.logger.info("Reward (total / average): \n{}".format(msg))
-        self.logger.info("Total reward: {}".format(sum(s for k, s in scores_sum)))
+        links = [{'inside_text': txt, 'url': url} for txt, url in examples]
+        A = self.link_vec.transform(links)
+        scores_target = self.Q.predict(A)
+        scores_online = self.Q.predict(A, online=True)
+        for (txt, url), score1, score2 in zip(examples, scores_target, scores_online):
+            print(" {:0.4f} {:0.4f} {:20s} {}".format(
+                score1, score2, txt, url_path_query(url),
+            ))
 
-    def checkpoint(self):
-        """
-        Save current crawl state, which can be analyzed while
-        the crawl is still going.
-        """
-        ts = int(time.time())
-        graph_filename = 'crawl-{}.pickle.gz'.format(ts)
-        # clf_filename = 'classifiers-{}.joblib'.format(ts)
-        self.save_crawl_graph(graph_filename)
-        # self.save_classifiers(clf_filename)
+        print("t={}, return={:0.4f}, avg return={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
+            self.Q.t_,
+            self.total_reward,
+            self.total_reward / self.Q.t_ if self.Q.t_ else 0,
+            self.Q.coef_norm(online=True),
+            self.Q.coef_norm()
+        ))
+        self.goal.print_score_stats()
 
-    def save_crawl_graph(self, path):
-        self.logger.info("Saving crawl graph...")
-        nx.write_gpickle(self.G, self._data_path(path))
-        self.logger.info("Crawl graph saved")
+        stats = self.get_stats_item()
+        print("Domains: {domains_open} open, {domains_closed} closed; "
+              "{todo} requests in queue, {processed} processed, {dropped} dropped".format(**stats))
 
-    # def save_classifiers(self, path):
-    #     self.logger.info("Saving classifiers...")
-    #     pipe = {
-    #         'vec': self.link_vectorizer,
-    #         'clf': self.link_classifiers,
-    #     }
-    #     joblib.dump(pipe, self._data_path(path), compress=3)
-    #     self.logger.info("Classifiers saved")
+    def get_stats_item(self):
+        domains_open, domains_closed = self._domain_stats()
+        stats = self.crawler.stats  # type: StatsCollector
+        enqueued = stats.get_value('custom-scheduler/enqueued/', 0)
+        dequeued = stats.get_value('custom-scheduler/dequeued/', 0)
+        dropped = stats.get_value('custom-scheduler/dropped/', 0)
+        todo = enqueued - dequeued - dropped
 
-    def _data_path(self, path):
-        return os.path.join('checkpoints', self.crawl_id, path)
+        return {
+            't': self.Q.t_,
+            'return': self.total_reward,
+            'domains_open': domains_open,
+            'domains_closed': domains_closed,
+            'enqueued': enqueued,
+            'processed': dequeued,
+            'dropped': dropped,
+            'todo': todo,
+        }
 
-    def closed(self, reason):
-        """ Save crawl graph to a file when spider is closed """
-        tasks = [
-            self.log_task,
-            self.checkpoint_task,
-            self.update_link_scores_task
-        ]
-        for task in tasks:
-            if task.running:
-                task.stop()
-        # self.save_classifiers('classifiers.joblib')
-        self.save_crawl_graph('crawl.pickle.gz')
+    def _domain_stats(self) -> Tuple[int, int]:
+        domains_open = len(self.scheduler.queue.get_active_slots())
+        domains_closed = len(self.scheduler.queue.closed_slots)
+        return domains_open, domains_closed
+
+    def get_params(self):
+        keys = self._ARGS - {'checkpoint_path', 'checkpoint_interval'}
+        return {key: getattr(self, key) for key in keys}
+
+    def maybe_checkpoint(self):
+        if not self.checkpoint_path:
+            return
+        if (self.Q.t_ % self.checkpoint_interval) != 0:
+            return
+        path = Path(self.checkpoint_path)
+        filename = "Q-%s.joblib" % self.Q.t_
+        self.dump_policy(path.joinpath(filename))
+
+    @log_time
+    def dump_policy(self, path):
+        """ Save the current policy """
+        data = {
+            'Q': self.Q,
+            'link_vec': self.link_vec,
+            '_params': self.get_params(),
+        }
+        joblib.dump(data, str(path), compress=3)

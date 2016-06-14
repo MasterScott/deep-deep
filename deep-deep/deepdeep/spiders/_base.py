@@ -1,30 +1,34 @@
 # -*- coding: utf-8 -*-
 import csv
+from typing import Optional
+
 import io
 import logging
 import random
 
 import scrapy
+from scrapy.utils.url import canonicalize_url
 from scrapy.exceptions import CloseSpider
 from scrapy.utils.response import get_base_url
 from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
 from formasaurus.utils import get_domain
 
 from deepdeep.links import extract_link_dicts
-from deepdeep.middlewares import offdomain_request_dropped
+from deepdeep.downloadermiddlewares import offdomain_request_dropped
 
 
 class BaseSpider(scrapy.Spider):
     """
-    Base spider class witho common code.
+    Base spider class with common code.
 
     Among other things it parses a file at ``seeds_url`` (URL per line)
     and calls parse for each URL.
     """
 
-    seeds_url = None  # set it in command line
+    seeds_url = None  # type: Optional[str]
     random_seed = 0
     response_count = 0
+    initial_priority = 5
 
     # if you're using command-line arguments override this set in a spider
     # like this:
@@ -61,10 +65,9 @@ class BaseSpider(scrapy.Spider):
         self.crawler.signals.connect(self.on_offdomain_request_dropped,
                                      offdomain_request_dropped)
 
-
         if self.seeds_url is None:
-            raise ValueError("Please pass seeds_url to the spider. "
-                             "It should be a text file with urls, one per line.")
+            raise ValueError("Please pass seeds_url to the spider. It should "
+                             "be a text file with urls, one per line.")
 
         seeds_url = guess_scheme(self.seeds_url)
 
@@ -76,7 +79,7 @@ class BaseSpider(scrapy.Spider):
             if url == 'url':
                 continue  # optional header
             url = add_http_if_no_scheme(url)
-            yield scrapy.Request(url, self.parse)
+            yield scrapy.Request(url, self.parse, priority=self.initial_priority)
 
     def increase_response_count(self):
         """
@@ -92,10 +95,19 @@ class BaseSpider(scrapy.Spider):
         if self.response_count >= max_items:
             raise CloseSpider("item_count")
 
-    def iter_link_dicts(self, response, domain=None):
+    def iter_link_dicts(self, response, domain=None, deduplicate=True):
         """
         Extract links from the response.
+        If ``domain`` is not None, only links for a given domain are returned.
+        If ``deduplicate`` is True (default), links with seen URLs
+        are not returned.
         """
+        links = self._iter_link_dicts(response, domain)
+        if deduplicate:
+            links = self.deduplicate_links(links)
+        return links
+
+    def _iter_link_dicts(self, response, domain=None):
         base_url = get_base_url(response)
         for link in extract_link_dicts(response.selector, base_url):
             url = link['url']
@@ -104,16 +116,25 @@ class BaseSpider(scrapy.Spider):
             if domain is not None and get_domain(url) != domain:
                 continue
 
-            # Filter out duplicate URLs.
-            # Requests are also filtered out in Scheduler by dupefilter.
-            # Here we filter them to avoid creating unnecessary nodes
-            # and edges.
-            # FIXME: use canonical URLs?
-            if url in self.seen_urls:
-                continue
-            self.seen_urls.add(url)
-
             yield link
+
+    def deduplicate_links(self, links, indices=False):
+        """
+        Filter out links with duplicate URLs.
+        Requests are also filtered out in Scheduler by dupefilter.
+        Here we filter them to avoid creating unnecessary nodes
+        and edges.
+        """
+        for idx, link in enumerate(links):
+            url = link['url']
+            canonical = canonicalize_url(url)
+            if canonical in self.seen_urls:
+                continue
+            self.seen_urls.add(canonical)
+            if indices:
+                yield idx, link
+            else:
+                yield link
 
     def on_offdomain_request_dropped(self, request):
         self.increase_response_count()
