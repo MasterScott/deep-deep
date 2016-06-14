@@ -1,19 +1,15 @@
 # -*- coding: utf-8 -*-
 import csv
-from typing import Optional
-
 import io
 import logging
 import random
+from typing import Optional
 
 import scrapy
-from scrapy.utils.url import canonicalize_url
 from scrapy.exceptions import CloseSpider
-from scrapy.utils.response import get_base_url
 from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
-from formasaurus.utils import get_domain
 
-from deepdeep.links import extract_link_dicts
+from deepdeep.links import DictLinkExtractor
 from deepdeep.downloadermiddlewares import offdomain_request_dropped
 
 
@@ -39,6 +35,7 @@ class BaseSpider(scrapy.Spider):
 
     def __init__(self, *args, **kwargs):
         self._validate_arguments(kwargs)
+        self.le = DictLinkExtractor()
         super().__init__(*args, **kwargs)
 
     def _validate_arguments(self, kwargs):
@@ -50,7 +47,10 @@ class BaseSpider(scrapy.Spider):
                 )
 
     def start_requests(self):
-        self.seen_urls = set()
+        if self.seeds_url is None:
+            raise ValueError("Please pass seeds_url to the spider. It should "
+                             "be a text file with urls, one per line.")
+        seeds_url = guess_scheme(self.seeds_url)
 
         # crawer can randomize links to select; make crawl deterministic
         # FIXME: it doesn't make crawl deterministic because
@@ -64,12 +64,6 @@ class BaseSpider(scrapy.Spider):
         # increase response count on filtered out requests
         self.crawler.signals.connect(self.on_offdomain_request_dropped,
                                      offdomain_request_dropped)
-
-        if self.seeds_url is None:
-            raise ValueError("Please pass seeds_url to the spider. It should "
-                             "be a text file with urls, one per line.")
-
-        seeds_url = guess_scheme(self.seeds_url)
 
         yield scrapy.Request(seeds_url, self._parse_seeds, dont_filter=True,
                              meta={'dont_obey_robotstxt': True})
@@ -94,47 +88,6 @@ class BaseSpider(scrapy.Spider):
                                                  float('inf'))
         if self.response_count >= max_items:
             raise CloseSpider("item_count")
-
-    def iter_link_dicts(self, response, domain=None, deduplicate=True):
-        """
-        Extract links from the response.
-        If ``domain`` is not None, only links for a given domain are returned.
-        If ``deduplicate`` is True (default), links with seen URLs
-        are not returned.
-        """
-        links = self._iter_link_dicts(response, domain)
-        if deduplicate:
-            links = self.deduplicate_links(links)
-        return links
-
-    def _iter_link_dicts(self, response, domain=None):
-        base_url = get_base_url(response)
-        for link in extract_link_dicts(response.selector, base_url):
-            url = link['url']
-
-            # only follow in-domain URLs
-            if domain is not None and get_domain(url) != domain:
-                continue
-
-            yield link
-
-    def deduplicate_links(self, links, indices=False):
-        """
-        Filter out links with duplicate URLs.
-        Requests are also filtered out in Scheduler by dupefilter.
-        Here we filter them to avoid creating unnecessary nodes
-        and edges.
-        """
-        for idx, link in enumerate(links):
-            url = link['url']
-            canonical = canonicalize_url(url)
-            if canonical in self.seen_urls:
-                continue
-            self.seen_urls.add(canonical)
-            if indices:
-                yield idx, link
-            else:
-                yield link
 
     def on_offdomain_request_dropped(self, request):
         self.increase_response_count()

@@ -2,9 +2,10 @@
 import re
 from urllib.parse import urljoin
 
+from formasaurus.utils import get_domain
 from scrapy.linkextractors import IGNORED_EXTENSIONS
-from scrapy.utils.url import url_has_any_extension
-
+from scrapy.utils.response import get_base_url
+from scrapy.utils.url import url_has_any_extension, canonicalize_url
 
 _NEW_IGNORED = {'7z', '7zip', 'xz', 'gz', 'tar', 'bz2', 'cdr', 'apk'}
 _IGNORED = set(IGNORED_EXTENSIONS) | _NEW_IGNORED
@@ -73,3 +74,54 @@ def extract_link_dicts(selector, base_url):
         link['before_text'] = a.xpath('./preceding::text()[1]').extract_first(default='').strip()[-100:]
 
         yield link
+
+
+def iter_response_link_dicts(self, response, domain=None):
+    base_url = get_base_url(response)
+    for link in extract_link_dicts(response.selector, base_url):
+        url = link['url']
+
+        # only follow in-domain URLs
+        if domain is not None and get_domain(url) != domain:
+            continue
+
+        yield link
+
+
+class DictLinkExtractor:
+    """
+    A custom link extractor. It returns link dicts instead of Link objects.
+    DictLinkExtractor is not compatible with Scrapy link extractors.
+    """
+    def __init__(self):
+        self.seen_urls = set()
+
+    def iter_link_dicts(self, response, domain=None, deduplicate=True):
+        """
+        Extract links from the response.
+        If ``domain`` is not None, only links for a given domain are returned.
+        If ``deduplicate`` is True (default), links with seen URLs
+        are not returned.
+        """
+        links = iter_response_link_dicts(response, domain)
+        if deduplicate:
+            links = self.deduplicate_links(links)
+        return links
+
+    def deduplicate_links(self, links, indices=False):
+        """
+        Filter out links with duplicate URLs.
+        Requests are also filtered out in Scheduler by dupefilter.
+        Here we filter them to avoid creating unnecessary requests
+        in first place; it helps other components like CrawlGraphMiddleware.
+        """
+        for idx, link in enumerate(links):
+            url = link['url']
+            canonical = canonicalize_url(url)
+            if canonical in self.seen_urls:
+                continue
+            self.seen_urls.add(canonical)
+            if indices:
+                yield idx, link
+            else:
+                yield link

@@ -234,7 +234,7 @@ class QSpider(BaseSpider):
             return
 
         domain = get_response_domain(response)
-        links = list(self.iter_link_dicts(
+        links = list(self.le.iter_link_dicts(
             response=response,
             domain=domain,
             deduplicate=False
@@ -255,7 +255,7 @@ class QSpider(BaseSpider):
             self.goal.response_observed(response)
 
         if links:
-            _links = list(self.deduplicate_links(links, indices=True))
+            _links = list(self.le.deduplicate_links(links, indices=True))
             if _links:
                 indices, links_to_follow = zip(*_links)
                 links_to_follow_matrix = links_matrix[list(indices)]
