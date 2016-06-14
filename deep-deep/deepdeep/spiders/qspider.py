@@ -81,7 +81,7 @@ class FormasaurusGoal:
         return self._domain_scores[domain]
 
     def print_score_stats(self):
-        print("Scores: sum={:8.1}, avg={0.4f}".format(
+        print("Scores: sum={:8.1f}, avg={:0.4f}".format(
             self._domain_scores.sum(), self._domain_scores.avg()
         ))
 
@@ -91,7 +91,7 @@ class QSpider(BaseSpider):
 
     _ARGS = {
         'double', 'task', 'use_urls', 'eps', 'balancing_temperature', 'gamma',
-        'replay_sample_size', 'steps_before_switch', 'task_done_threshold',
+        'replay_sample_size', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
     }
     ALLOWED_ARGUMENTS = _ARGS | BaseSpider.ALLOWED_ARGUMENTS
