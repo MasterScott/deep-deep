@@ -78,7 +78,7 @@ class CrawlAllSpider(BaseSpider):
 
         # limit crawl to the first domain
         domain = get_response_domain(response)
-        links = list(self.iter_link_dicts(response, domain))
+        links = list(self.le.iter_link_dicts(response, domain))
 
         if shuffle:
             random.shuffle(links)
