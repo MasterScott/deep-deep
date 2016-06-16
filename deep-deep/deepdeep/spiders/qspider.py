@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
+import abc
 import json
 from pathlib import Path
-from typing import Dict, Tuple
-from weakref import WeakKeyDictionary
+from typing import Dict, Tuple, Union, Optional, List, Iterator
 
 import joblib
 import tqdm
+import numpy as np
+import scipy.sparse as sp
+from formasaurus.utils import get_domain
 import scrapy
-from scrapy.http import TextResponse
+from scrapy.http import TextResponse, Response
 from scrapy.statscollectors import StatsCollector
 
 from deepdeep.queues import (
@@ -18,79 +21,29 @@ from deepdeep.queues import (
 from deepdeep.scheduler import Scheduler
 from deepdeep.spiders._base import BaseSpider
 from deepdeep.utils import (
-    get_response_domain,
     set_request_domain,
     url_path_query,
-    MaxScores,
 )
-from deepdeep.score_pages import response_max_scores
 from deepdeep.qlearning import QLearner
 from deepdeep.utils import log_time
-from deepdeep.vectorizers import LinkVectorizer
-
-
-class FormasaurusGoal:
-    """
-    Parameters
-    ----------
-
-    formtype : str
-        Form type to look for. Allowed values:
-
-        * "search"
-        * "login"
-        * "registration"
-        * "password/login recovery"
-        * "contact/comment"
-        * "join mailing list"
-        * "order/add to cart"
-        * "other"
-
-    threshold : float
-         Probability threshold required to consider the goal acheived
-         for a domain (default: 0.7).
-    """
-    def __init__(self, formtype: str, threshold: float=0.7) -> None:
-        self.formtype = formtype
-        self.threshold = threshold
-        self._cache = WeakKeyDictionary()
-        self._domain_scores = MaxScores()  # domain -> max score
-
-    def get_reward(self, response: TextResponse) -> float:
-        """ Return a reward for a response """
-        if response not in self._cache:
-            if hasattr(response, 'text'):
-                scores = response_max_scores(response)
-                score = scores.get(self.formtype, 0.0)
-                # score = score if score > 0.5 else 0
-            else:
-                score = 0.0
-            self._cache[response] = score
-        return self._cache[response]
-
-    def response_observed(self, response: TextResponse):
-        reward = self.get_reward(response)
-        domain = get_response_domain(response)
-        self._domain_scores.update(domain, reward)
-
-    def is_acheived_for(self, domain):
-        score = self._domain_scores[domain]
-        return score > self.threshold
-
-    def domain_score(self, domain):
-        return self._domain_scores[domain]
-
-    def print_score_stats(self):
-        print("Scores: sum={:8.1f}, avg={:0.4f}".format(
-            self._domain_scores.sum(), self._domain_scores.avg()
-        ))
+from deepdeep.vectorizers import LinkVectorizer, PageVectorizer
+from deepdeep.goals import FormasaurusGoal, BaseGoal
 
 
 class QSpider(BaseSpider):
-    name = 'q'
+    """
+    This spider learns how to crawl using Q-Learning.
 
+    It starts from a list of seed URLs. When a page is received, spider
+
+    1. updates Q function based on observed reward;
+    2. extracts links and creates requests for them, using Q function
+       to set priorities
+
+    """
+    name = 'q'
     _ARGS = {
-        'double', 'task', 'use_urls', 'eps', 'balancing_temperature', 'gamma',
+        'double', 'use_urls', 'use_pages', 'eps', 'balancing_temperature', 'gamma',
         'replay_sample_size', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
     }
@@ -103,19 +56,11 @@ class QSpider(BaseSpider):
     }
     initial_priority = score_to_priority(5)
 
-    # Goal. Allowed values:
-    #     "search"
-    #     "login"
-    #     "registration"
-    #     "password/login recovery"
-    #     "contact/comment"
-    #     "join mailing list"
-    #     "order/add to cart"
-    #     "other"
-    task = 'password/login recovery'
-
     # whether to use URL path/query as a feature
     use_urls = 0
+
+    # whether to use page content as a feature
+    use_pages = 0
 
     # use Double Learning
     double = 1
@@ -124,30 +69,6 @@ class QSpider(BaseSpider):
     eps = 0.2
 
     # 0 <= gamma < 1; lower values make spider focus on immediate reward.
-    #
-    #     gamma     % of credit assigned to n-th previous step  effective steps
-    #     -----     ------------------------------------------  ---------------
-    #     0.00      100   0   0   0   0   0   0   0   0   0     1
-    #     0.05      100   5   0   0   0   0   0   0   0   0     2
-    #     0.10      100  10   1   0   0   0   0   0   0   0     2
-    #     0.15      100  15   2   0   0   0   0   0   0   0     2
-    #     0.20      100  20   4   0   0   0   0   0   0   0     2
-    #     0.25      100  25   6   1   0   0   0   0   0   0     3
-    #     0.30      100  30   9   2   0   0   0   0   0   0     3
-    #     0.35      100  35  12   4   1   0   0   0   0   0     3
-    #     0.40      100  40  16   6   2   1   0   0   0   0     4
-    #     0.45      100  45  20   9   4   1   0   0   0   0     4
-    #     0.50      100  50  25  12   6   3   1   0   0   0     5
-    #     0.55      100  55  30  16   9   5   2   1   0   0     6
-    #     0.60      100  60  36  21  12   7   4   2   1   1     6
-    #     0.65      100  65  42  27  17  11   7   4   3   2     7
-    #     0.70      100  70  48  34  24  16  11   8   5   4     9
-    #     0.75      100  75  56  42  31  23  17  13  10   7     10
-    #     0.80      100  80  64  51  40  32  26  20  16  13     10+
-    #     0.85      100  85  72  61  52  44  37  32  27  23     10+
-    #     0.90      100  90  81  72  65  59  53  47  43  38     10+
-    #     0.95      100  95  90  85  81  77  73  69  66  63     10+
-    #
     gamma = 0.4
 
     # softmax temperature for domain balancer;
@@ -167,19 +88,23 @@ class QSpider(BaseSpider):
     # Where to store checkpoints. By default they are not stored.
     checkpoint_path = None
 
-    def __init__(self, *args, **kwargs):
+    # Is spider allowed to follow out-of-domain links?
+    # XXX: it is not enough to set this to False; a middleware should be also
+    # turned off.
+    stay_in_domain = True
+
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.eps = float(self.eps)
         self.balancing_temperature = float(self.balancing_temperature)
         self.gamma = float(self.gamma)
         self.use_urls = bool(int(self.use_urls))
+        self.use_pages = bool(int(self.use_pages))
         self.double = bool(int(self.double))
+        self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
-        self.checkpoint_interval = int(self.checkpoint_interval)
-
-        self.goal = FormasaurusGoal(formtype=self.task)
         self.Q = QLearner(
             steps_before_switch=self.steps_before_switch,
             replay_sample_size=self.replay_sample_size,
@@ -187,92 +112,109 @@ class QSpider(BaseSpider):
             double_learning=self.double,
             on_model_changed=self.on_model_changed,
         )
-        self.link_vec = LinkVectorizer(use_url=self.use_urls)
+        self.link_vectorizer = LinkVectorizer(use_url=self.use_urls)
+        self.page_vectorizer = PageVectorizer()
         self.total_reward = 0
         self.model_changes = 0
+        self.goal = self.get_goal()
 
-        params = json.dumps(self.get_params(), indent=4)
-        print(params)
-        (Path(self.checkpoint_path)/"params.json").write_text(params)
+        self.checkpoint_interval = int(self.checkpoint_interval)
+        if self.checkpoint_path:
+            params = json.dumps(self.get_params(), indent=4)
+            print(params)
+            (Path(self.checkpoint_path)/"params.json").write_text(params)
 
-    def on_model_changed(self):
-        self.model_changes += 1
-        if (self.model_changes % 1) == 0:
-            self.recalculate_request_priorities()
+    # @abc.abstractmethod
+    def get_goal(self) -> BaseGoal:
+        """ This method should return a crawl goal object """
+        # FIXME: remove hardcoded goal
+        return FormasaurusGoal(formtype='password/login recovery')
 
-    def close_finished_queues(self):
-        for slot in self.scheduler.queue.get_active_slots():
-            if self.goal.is_acheived_for(domain=slot):
-                score = self.goal.domain_score(slot)
-                print("Queue {} is closed; score={:0.4f}.".format(slot, score))
-                self.scheduler.close_slot(slot)
+    def is_seed(self, r: Union[scrapy.Request, Response]) -> bool:
+        return 'link_vector' not in r.meta
 
     def parse(self, response):
         self.increase_response_count()
         self.close_finished_queues()
-
-        if 'link' in response.meta:
-            reward = self.goal.get_reward(response)
-            self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
-                reward,
-                priority_to_score(response.request.priority),
-                response.url,
-                response.meta['link'].get('inside_text'),
-            ))
-
-        if not hasattr(response, 'text'):
-            if 'link_vector' in response.meta:
-                # learn to avoid non-html responses
-                self.Q.add_experience(
-                    a_t=response.meta['link_vector'],
-                    A_t1=None,
-                    r_t1=0
-                )
-                self.log_stats()
-                self.maybe_checkpoint()
-                yield self.get_stats_item()
-            return
-
-        domain = get_response_domain(response)
-        links = list(self.le.iter_link_dicts(
-            response=response,
-            domain=domain,
-            deduplicate=False
-        ))
-        links_matrix = self.link_vec.transform(links) if links else None
-
-        if 'link_vector' in response.meta:
-            reward = self.goal.get_reward(response)
-            self.total_reward += reward
-            self.Q.add_experience(
-                a_t=response.meta['link_vector'],
-                A_t1=links_matrix,
-                r_t1=reward
-            )
+        self._debug_expected_vs_got(response)
+        output = self._parse(response)
+        if not self.is_seed(response):
             self.log_stats()
             self.maybe_checkpoint()
             yield self.get_stats_item()
+        yield from output
+
+    def _parse(self, response):
+        if self.is_seed(response) and not hasattr(response, 'text'):
+            # bad seed
+            return []
+
+        as_t = response.meta.get('link_vector')
+
+        if not hasattr(response, 'text'):
+            # learn to avoid non-html responses
+            self.Q.add_experience(
+                as_t=as_t,
+                AS_t1=None,
+                r_t1=0
+            )
+            return []
+
+        page_vector = self._get_page_vector(response)
+        links = self._extract_links(response)
+        links_matrix = self.link_vectorizer.transform(links) if links else None
+        links_matrix = self.Q.join_As(links_matrix, page_vector)
+
+        if not self.is_seed(response):
+            reward = self.goal.get_reward(response)
+            self.total_reward += reward
+            self.Q.add_experience(
+                as_t=as_t,
+                AS_t1=links_matrix,
+                r_t1=reward
+            )
             self.goal.response_observed(response)
+        return list(self._links_to_requests(links, links_matrix))
 
-        if links:
-            _links = list(self.le.deduplicate_links(links, indices=True))
-            if _links:
-                indices, links_to_follow = zip(*_links)
-                links_to_follow_matrix = links_matrix[list(indices)]
-                scores = self.Q.predict(links_to_follow_matrix)
+    def _extract_links(self, response: TextResponse) -> List[Dict]:
+        """ Return a list of all unique links on a page """
+        this_domain = get_domain(response.url)
+        return list(self.le.iter_link_dicts(
+            response=response,
+            domain=this_domain if self.stay_in_domain else None,
+            deduplicate=False,
+            deduplicate_local=True,
+        ))
 
-                for link, v, score in zip(links_to_follow, links_to_follow_matrix, scores):
-                    meta = {
-                        'link_vector': v,
-                        'link': link,  # FIXME: turn it off for production
-                        'scheduler_slot': domain,
-                    }
-                    priority = score_to_priority(score)
-                    req = scrapy.Request(link['url'], priority=priority, meta=meta)
-                    set_request_domain(req, domain)
-                    if score > 0.5:
-                        self._log_promising_link(link, score)
-                    yield req
+    def _links_to_requests(self,
+                           links: List[Dict],
+                           links_matrix: sp.csr_matrix,
+                           ) -> Iterator[scrapy.Request]:
+        indices_and_links = list(self.le.deduplicate_links(links, indices=True))
+        if not indices_and_links:
+            return
+        indices, links_to_follow = zip(*indices_and_links)
+        AS = links_matrix[list(indices)]
+        scores = self.Q.predict(AS)
+
+        for link, v, score in zip(links_to_follow, AS, scores):
+            url = link['url']
+            next_domain = get_domain(url)
+            meta = {
+                'link_vector': v,
+                'link': link,  # FIXME: turn it off for production
+                'scheduler_slot': next_domain,
+            }
+            priority = score_to_priority(score)
+            req = scrapy.Request(url, priority=priority, meta=meta)
+            set_request_domain(req, next_domain)
+            yield req
+
+    def _get_page_vector(self, response: TextResponse) -> Optional[np.ndarray]:
+        """ Convert response content to a feature vector """
+        if not self.use_pages:
+            return None
+        return self.page_vectorizer.transform([response.text])[0]
 
     def get_scheduler_queue(self):
         """
@@ -291,15 +233,26 @@ class QSpider(BaseSpider):
     def scheduler(self) -> Scheduler:
         return self.crawler.engine.slot.scheduler
 
+    def on_model_changed(self):
+        self.model_changes += 1
+        if (self.model_changes % 1) == 0:
+            self.recalculate_request_priorities()
+
+    def close_finished_queues(self):
+        for slot in self.scheduler.queue.get_active_slots():
+            if self.goal.is_acheived_for(domain=slot):
+                self.scheduler.close_slot(slot)
+
     @log_time
     def recalculate_request_priorities(self):
         # TODO: vectorize
-        def request_priority(request: scrapy.Request):
-            link_vector = request.meta.get('link_vector', None)
-            if link_vector is None:
+        def request_priority(request: scrapy.Request) -> int:
+            if self.is_seed(request):
                 return request.priority
-            score = self.Q.predict_one(link_vector)
-            if score > 0.5:
+
+            as_ = request.meta['link_vector']
+            score = self.Q.predict_one(as_)
+            if score > 0.5 and 'link' in request.meta:
                 self._log_promising_link(request.meta['link'], score)
             return score_to_priority(score)
 
@@ -312,7 +265,7 @@ class QSpider(BaseSpider):
             score, link['url'], link['inside_text']
         ))
 
-    def log_stats(self):
+    def _examples(self):
         examples = [
             ['forgot password', 'http://example.com/wp-login.php?action=lostpassword'],
             ['registration', 'http://example.com/register'],
@@ -328,14 +281,23 @@ class QSpider(BaseSpider):
             ['sadhjgrhgsfd', 'http://example.com/new-to-exhibiting/discover-your-stand-position/'],
             ['забыли пароль', 'http://example.com/users/send-password/'],
         ]
+        examples_repr = [
+            "{:20s} {}".format(txt, url_path_query(url))
+            for txt, url in examples
+        ]
         links = [{'inside_text': txt, 'url': url} for txt, url in examples]
-        A = self.link_vec.transform(links)
-        scores_target = self.Q.predict(A)
-        scores_online = self.Q.predict(A, online=True)
-        for (txt, url), score1, score2 in zip(examples, scores_target, scores_online):
-            print(" {:0.4f} {:0.4f} {:20s} {}".format(
-                score1, score2, txt, url_path_query(url),
-            ))
+        A = self.link_vectorizer.transform(links)
+        s = self.page_vectorizer.transform([""]) if self.use_pages else None
+        AS = self.Q.join_As(A, s)
+        return examples_repr, AS
+
+    def log_stats(self):
+        examples, AS = self._examples()
+        if examples:
+            scores_target = self.Q.predict(AS)
+            scores_online = self.Q.predict(AS, online=True)
+            for ex, score1, score2 in zip(examples, scores_target, scores_online):
+                print(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
 
         print("t={}, return={:0.4f}, avg return={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
             self.Q.t_,
@@ -344,7 +306,7 @@ class QSpider(BaseSpider):
             self.Q.coef_norm(online=True),
             self.Q.coef_norm()
         ))
-        self.goal.print_score_stats()
+        self.goal.debug_print()
 
         stats = self.get_stats_item()
         print("Domains: {domains_open} open, {domains_closed} closed; "
@@ -359,6 +321,7 @@ class QSpider(BaseSpider):
         todo = enqueued - dequeued - dropped
 
         return {
+            '_type': 'stats',
             't': self.Q.t_,
             'return': self.total_reward,
             'domains_open': domains_open,
@@ -368,6 +331,17 @@ class QSpider(BaseSpider):
             'dropped': dropped,
             'todo': todo,
         }
+
+    def _debug_expected_vs_got(self, response: Response):
+        if 'link' not in response.meta:
+            return
+        reward = self.goal.get_reward(response)
+        self.logger.debug("\nGOT {:0.4f} (expected return was {:0.4f}) {}\n{}".format(
+            reward,
+            priority_to_score(response.request.priority),
+            response.url,
+            response.meta['link'].get('inside_text'),
+        ))
 
     def _domain_stats(self) -> Tuple[int, int]:
         domains_open = len(self.scheduler.queue.get_active_slots())
@@ -392,7 +366,8 @@ class QSpider(BaseSpider):
         """ Save the current policy """
         data = {
             'Q': self.Q,
-            'link_vec': self.link_vec,
+            'link_vectorizer': self.link_vectorizer,
+            'page_vectorizer': self.page_vectorizer,
             '_params': self.get_params(),
         }
         joblib.dump(data, str(path), compress=3)

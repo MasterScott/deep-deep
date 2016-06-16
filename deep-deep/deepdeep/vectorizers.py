@@ -2,12 +2,15 @@
 from __future__ import absolute_import
 from typing import Dict
 
+import parsel
+from lxml.html.clean import Cleaner
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.pipeline import make_union
 from formasaurus.text import normalize
 from scrapy.utils.url import canonicalize_url
+from scrapy.http import Response
 
-from deepdeep.utils import url_path_query
+from deepdeep.utils import url_path_query, html2text
 
 
 def LinkVectorizer(use_url: bool=False):
@@ -34,6 +37,17 @@ def LinkVectorizer(use_url: bool=False):
         ngram_range=(4,5),
     )
     return make_union(text_vec, url_vec)
+
+
+def PageVectorizer():
+    """ Vectorizer for converting page HTML content to feature vectors """
+    text_vec = HashingVectorizer(
+        preprocessor=html2text,
+        n_features=1024*1024,
+        binary=False,
+        ngram_range=(1, 1),
+    )
+    return text_vec
 
 
 def _link_inside_text(link: Dict):

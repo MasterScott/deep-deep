@@ -64,6 +64,10 @@ two functions are used:
   experience replay memory; each N steps parameters of online Q function
   are copied to the target Q function.
 
+For efficiency reasons instead of two (s, a) vectors a single vector is used,
+with all features joined. It requires ~2x RAM because multiple
+`s` copies are stored in memory, but the scipy-based implementation becomes
+10x faster.
 """
 from __future__ import absolute_import
 import random
@@ -170,19 +174,37 @@ class QLearner:
         self.memory = ExperienceMemory()
         self.t_ = 0
 
-    def add_experience(self, a_t, A_t1, r_t1, s_t=None, s_t1=None) -> None:
+    @classmethod
+    def join_As(cls,
+                A: sparse.spmatrix,
+                s: Optional[sparse.spmatrix]) -> sparse.csr_matrix:
+        """
+        Append vector ``s`` to each row of matrix ``A``.
+
+        For efficiency reasons state vector should be appended to each
+        action vector. It requires ~2x RAM, but is ~10x faster in the end.
+        """
+        if A is not None and s is not None:
+            n_rows = A.shape[0]
+            S = sparse.vstack([s] * n_rows)
+            return sparse.hstack([A, S]).tocsr()
+        else:
+            return A
+
+    @classmethod
+    def join_as(cls,
+                a: sparse.spmatrix,
+                s: Optional[sparse.spmatrix]) -> sparse.csr_matrix:
+        """ Append sparse vector ``s`` to sparse vector ``a``. """
+        return sparse.hstack([a, s]).tocsr() if s is not None else a
+
+    def add_experience(self, as_t, AS_t1, r_t1) -> None:
         """
         Tell QLearner about the observed experience. QLearner stores it
         to the experience replay memory and updates Q functions.
         """
         self.t_ += 1
-        self.memory.add(
-            a_t=a_t,
-            A_t1=A_t1,
-            r_t1=r_t1,
-            s_t=s_t,
-            s_t1=s_t1,
-        )
+        self.memory.add(as_t=as_t, AS_t1=AS_t1, r_t1=r_t1)
 
         if (self.t_ % self.fit_interval) == 0:
             self.fit_iteration(self.replay_sample_size)
@@ -192,17 +214,19 @@ class QLearner:
             if self.on_model_changed is not None:
                 self.on_model_changed()
 
-    def predict(self, A, S=None, online: bool=False) -> np.ndarray:
+    def predict(self, AS: sparse.csr_matrix, online: bool=False) -> np.ndarray:
         """
         Compute Q(s, a) function for all state-action pairs.
 
         Parameters
         ----------
 
-        A : csr_matrix, shape (n_rows, n_action_features)
-            Feature matrix for actions.
-        S : csr_matrix, shape (n_rows, n_state_features), optional
-            Feature matrix for states.
+        AS : csr_matrix, shape (n_rows, n_action_features + n_state_features)
+             Feature matrix for actions. If state features are used, state
+             feature vector should be appended to each action feature row.
+
+             See also: :meth:`join_As`.
+
         online : bool
             Whether to use online Q function (default is False, meaning
             target Q function is used for predictions).
@@ -214,12 +238,11 @@ class QLearner:
 
         """
         clf = self.clf_target if not online else self.clf_online
-        X = sparse.hstack([A, S]) if S is not None else A
         if clf.coef_ is None:
-            return np.ones(X.shape[0]) * self.initial_predictions
-        return clf.predict(X)
+            return np.ones(AS.shape[0]) * self.initial_predictions
+        return clf.predict(AS)
 
-    def predict_one(self, a, s=None, online=False) -> float:
+    def predict_one(self, as_, online=False) -> float:
         """
         Compute Q(s, a) function.
 
@@ -229,10 +252,12 @@ class QLearner:
         Parameters
         ----------
 
-        a : array-like, shape (n_action_features,)
-            Feature matrix for action.
-        s : array-like, shape (n_state_features), optional
-            Feature matrix for state.
+        as_ : array-like, shape (n_action_features + n_state_features,)
+            Feature vector for action. If state features are used, state
+            feature vector should be appended to the action feature vector.
+
+            See also: :meth:`join_as`.
+
         online : bool
             Whether to use online Q function (default is False, meaning
             target Q function is used for predictions).
@@ -243,8 +268,7 @@ class QLearner:
             :math:`Q(s, a)` value
 
         """
-        x = sparse.hstack([a, s]) if s is not None else a
-        return self.predict(sparse.vstack([x]), online=online)[0]
+        return self.predict(sparse.vstack([as_]), online=online)[0]
 
     @log_time
     def fit_iteration(self, sample_size: int) -> None:
@@ -253,13 +277,21 @@ class QLearner:
         replay memory.
         """
         sample = self.memory.sample(sample_size)
-        a_t_list, A_t1_list, r_t1_list, s_t_list, s_t1_list = zip(*sample)
+        as_t_list, AS_t1_list, r_t1_list = zip(*sample)
         rewards = np.asarray(r_t1_list)
+        X = sparse.vstack(as_t_list)
+        Q_t1_vector = self._get_Q_t1_values(rewards.shape, AS_t1_list)
+        y = rewards + self.gamma * Q_t1_vector
+        self.clf_online.partial_fit(X, y)
 
-        Q_t1_values = np.zeros_like(rewards)
-        for idx, A_t1 in enumerate(A_t1_list or []):
-            if A_t1 is not None and A_t1.shape[0] > 0:
-                scores = self.predict(A_t1, online=True)
+    def _get_Q_t1_values(self,
+                         shape: Tuple,
+                         AS_t1_list: List[sparse.csr_matrix],
+                         ):
+        Q_t1_values = np.zeros(shape)
+        for idx, AS_t1 in enumerate(AS_t1_list):
+            if AS_t1 is not None and AS_t1.shape[0] > 0:
+                scores = self.predict(AS_t1, online=True)
                 if self.double_learning:
                     # This is a simple variant of double learning
                     # used in http://arxiv.org/abs/1509.06461.
@@ -267,14 +299,13 @@ class QLearner:
                     # action is chosen by online Q function, but the score
                     # is estimated using target Q function.
                     best_idx = scores.argmax()
-                    a_t1 = A_t1[best_idx]
-                    Q_t1_values[idx] = self.predict_one(a_t1, online=False)
+                    as_t1 = AS_t1[best_idx]
+                    Q_t1_values[idx] = self.predict_one(as_t1, online=False)
                 else:
                     Q_t1_values[idx] = scores.max()  # vanilla Q-learning
-
-        X = sparse.vstack(a_t_list)
-        y = rewards + self.gamma * Q_t1_values
-        self.clf_online.partial_fit(X, y)
+        print('Q_t1_values shape:', Q_t1_values.shape)
+        print('Total links: ', sum(_A.shape[0] for _A in AS_t1_list if _A is not None))
+        return Q_t1_values
 
     def _update_target_clf(self):
         trained_params = [
@@ -315,11 +346,11 @@ class ExperienceMemory:
     def __init__(self):
         self.data = []  # TODO: more efficient storage
 
-    def add(self, a_t, A_t1, r_t1, s_t=None, s_t1=None) -> None:
+    def add(self, as_t, AS_t1, r_t1) -> None:
         """ Add an example to the replay memory """
-        self.data.append((a_t, A_t1, r_t1, s_t, s_t1))
+        self.data.append((as_t, AS_t1, r_t1))
 
-    def sample(self, k: Optional[int]) -> List[Tuple[Any, Any, Any, Any, Any]]:
+    def sample(self, k: Optional[int]) -> List[Tuple[Any, Any, Any]]:
         """
         Return no more than ``k`` random examples from the memory.
         """

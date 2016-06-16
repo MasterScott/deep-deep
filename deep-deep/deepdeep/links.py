@@ -93,31 +93,38 @@ class DictLinkExtractor:
     def __init__(self):
         self.seen_urls = set()
 
-    def iter_link_dicts(self, response, domain=None, deduplicate=True):
+    def iter_link_dicts(self, response, domain=None, deduplicate=True,
+                        deduplicate_local=True):
         """
         Extract links from the response.
         If ``domain`` is not None, only links for a given domain are returned.
         If ``deduplicate`` is True (default), links with seen URLs
         are not returned.
+        If ``deduplicate_local`` is True (default), links which are duplicate
+        on a page are not returned.
         """
         links = iter_response_link_dicts(response, domain)
         if deduplicate:
             links = self.deduplicate_links(links)
+        elif deduplicate_local:
+            links = self.deduplicate_links(links, seen_urls=set())
         return links
 
-    def deduplicate_links(self, links, indices=False):
+    def deduplicate_links(self, links, indices=False, seen_urls=None):
         """
         Filter out links with duplicate URLs.
         Requests are also filtered out in Scheduler by dupefilter.
         Here we filter them to avoid creating unnecessary requests
         in first place; it helps other components like CrawlGraphMiddleware.
         """
+        if seen_urls is None:
+            seen_urls = self.seen_urls
         for idx, link in enumerate(links):
             url = link['url']
             canonical = canonicalize_url(url)
-            if canonical in self.seen_urls:
+            if canonical in seen_urls:
                 continue
-            self.seen_urls.add(canonical)
+            seen_urls.add(canonical)
             if indices:
                 yield idx, link
             else:

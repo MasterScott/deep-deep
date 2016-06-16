@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os
+import time
 import itertools
 import functools
 import collections
@@ -7,8 +7,10 @@ from urllib.parse import unquote_plus
 from urllib.parse import urlsplit
 
 import numpy as np
-import time
-
+import parsel
+import lxml.html
+from lxml import etree
+from lxml.html.clean import Cleaner
 from formasaurus.utils import get_domain
 
 
@@ -147,3 +149,41 @@ def log_time(func):
             end = time.time()
             print("{} took {:0.4f}s".format(func, end-start))
     return wrapper
+
+
+_clean_html = Cleaner(javascript=True, style=True).clean_html
+
+
+def _cleaned_html_tree(html: str) -> lxml.html.HtmlElement:
+    parser = lxml.html.HTMLParser(encoding='utf8')
+    tree = lxml.html.fromstring(html.encode('utf8'), parser=parser)
+    return _clean_html(tree)
+
+
+def _selector_to_text(sel: parsel.Selector) -> str:
+    return sel.xpath('normalize-space()').extract_first('')
+
+
+def html2text(html: str) -> str:
+    """
+    Convert html to text.
+
+    >>> html = '<html><body><style>.div {}</style><p>Hello,   world!</body></html>'
+    >>> html2text(html)
+    'Hello, world!'
+
+    It works with XHTML declared ecodings:
+    >>> html = '<?xml version="1.0" encoding="utf-8" ?><html><body><style>.div {}</style>Hello,   world!</p></body></html>'
+    >>> html2text(html)
+    'Hello, world!'
+
+    >>> html2text("")
+    ''
+    """
+    try:
+        tree = _cleaned_html_tree(html)
+        sel = parsel.Selector(root=tree, type='html')
+    except etree.XMLSyntaxError:
+        # likely plain text
+        sel = parsel.Selector(html)
+    return _selector_to_text(sel)
