@@ -2,13 +2,10 @@
 from __future__ import absolute_import
 from typing import Dict
 
-import parsel
-from lxml.html.clean import Cleaner
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.pipeline import make_union
 from formasaurus.text import normalize
 from scrapy.utils.url import canonicalize_url
-from scrapy.http import Response
 
 from deepdeep.utils import url_path_query, html2text
 

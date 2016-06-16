@@ -52,7 +52,7 @@ class CrawlGraphMiddleware(BaseExtension):
     1. set ``request.meta['node_data']`` dict with additional node attributes
        when sending the request;
     2. update ``self.G.node[response.meta['node_id']]`` dict after response
-       is received (usually in a parse_.. callback).
+       is received (usually in a ``parse_..`` callback).
 
     Edge data is empty by default; to attach information to edges send requests
     with non-empty ``request.meta['edge_data']`` dicts.

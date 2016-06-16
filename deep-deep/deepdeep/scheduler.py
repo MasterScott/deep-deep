@@ -59,7 +59,7 @@ class Scheduler:
             self.stats.inc_value('custom-scheduler/dequeued/', spider=self.spider)
         return request
 
-    def close_slot(self, slot):
+    def close_slot(self, slot: str) -> None:
         """
         Stop processing requests for a given slot.
         This function doesn't work if scheduler queue is
