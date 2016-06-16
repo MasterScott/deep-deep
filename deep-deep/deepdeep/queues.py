@@ -237,7 +237,8 @@ class BalancedPriorityQueue:
             queue = self.queues[np.random.choice(keys, p=p)]
         # print(queue, dict(zip(domains, p)))
         request = queue.pop_random() if random_policy else queue.pop()
-        request.meta['from_random_policy'] = random_policy
+        if request is not None:
+            request.meta['from_random_policy'] = random_policy
         return request
 
     def get_active_slots(self) -> List[str]:
