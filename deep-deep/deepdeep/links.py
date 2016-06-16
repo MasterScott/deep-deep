@@ -76,15 +76,12 @@ def extract_link_dicts(selector, base_url):
         yield link
 
 
-def iter_response_link_dicts(self, response, domain=None):
+def iter_response_link_dicts(response, domain=None):
     base_url = get_base_url(response)
     for link in extract_link_dicts(response.selector, base_url):
         url = link['url']
-
-        # only follow in-domain URLs
         if domain is not None and get_domain(url) != domain:
             continue
-
         yield link
 
 
