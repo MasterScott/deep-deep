@@ -12,6 +12,7 @@ import lxml.html
 from lxml import etree
 from lxml.html.clean import Cleaner
 from formasaurus.utils import get_domain
+from scrapy.utils.url import canonicalize_url as _canonicalize_url
 
 
 def dict_aggregate_max(*dicts):
@@ -187,3 +188,8 @@ def html2text(html: str) -> str:
         # likely plain text
         sel = parsel.Selector(html)
     return _selector_to_text(sel)
+
+
+@functools.lru_cache(maxsize=100000)
+def canonicalize_url(url):
+    return _canonicalize_url(url)

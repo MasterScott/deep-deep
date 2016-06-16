@@ -5,7 +5,8 @@ from urllib.parse import urljoin
 from formasaurus.utils import get_domain
 from scrapy.linkextractors import IGNORED_EXTENSIONS
 from scrapy.utils.response import get_base_url
-from scrapy.utils.url import url_has_any_extension, canonicalize_url
+from scrapy.utils.url import url_has_any_extension
+from deepdeep.utils import canonicalize_url
 
 _NEW_IGNORED = {'7z', '7zip', 'xz', 'gz', 'tar', 'bz2', 'cdr', 'apk'}
 _IGNORED = set(IGNORED_EXTENSIONS) | _NEW_IGNORED

@@ -5,9 +5,8 @@ from typing import Dict
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.pipeline import make_union
 from formasaurus.text import normalize
-from scrapy.utils.url import canonicalize_url
 
-from deepdeep.utils import url_path_query, html2text
+from deepdeep.utils import url_path_query, html2text, canonicalize_url
 
 
 def LinkVectorizer(use_url: bool=False):
