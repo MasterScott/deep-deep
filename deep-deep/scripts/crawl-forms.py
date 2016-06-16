@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-usage: crawl-q.py <path/to/urls.csv> <results-path> [...spider arguments]
+usage: crawl-forms.py <path/to/urls.csv> <results-path> [...spider arguments]
 """
 from pathlib import Path
 import sys
