@@ -289,6 +289,15 @@ class QLearner:
                          AS_t1_list: List[sparse.csr_matrix],
                          ):
         Q_t1_values = np.zeros(shape)
+
+        # XXX: An alternative way to implement it would be to
+        # stack all AS_t1 matrices into one big matrix, predict
+        # all scores at once, and then slice the result according
+        # to shapes of original matrices to fill Q_t1_values.
+        # The implementation can be found here:
+        # https://gist.github.com/kmike/c0d3fa1822cd6ddcdbca9b067ee3e94a;
+        # it turns out to be ~4x slower.
+
         for idx, AS_t1 in enumerate(AS_t1_list):
             if AS_t1 is not None and AS_t1.shape[0] > 0:
                 scores = self.predict(AS_t1, online=True)
@@ -303,8 +312,8 @@ class QLearner:
                     Q_t1_values[idx] = self.predict_one(as_t1, online=False)
                 else:
                     Q_t1_values[idx] = scores.max()  # vanilla Q-learning
-        print('Q_t1_values shape:', Q_t1_values.shape)
-        print('Total links: ', sum(_A.shape[0] for _A in AS_t1_list if _A is not None))
+        # print('Q_t1_values shape:', Q_t1_values.shape)
+        # print('Total links: ', sum(_A.shape[0] for _A in AS_t1_list if _A is not None))
         return Q_t1_values
 
     def _update_target_clf(self):
