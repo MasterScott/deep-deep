@@ -99,21 +99,29 @@ class RequestsPriorityQueue:
         :meth:`heapify`.
         """
         entry[0] = -new_priority
-        if entry[2] is not cls.REMOVED:
+        if cls.entry_is_active(entry):
             entry[2].priority = new_priority
 
-    def update_all_priorities(self, compute_priority_func) -> None:
+    @classmethod
+    def entry_is_active(cls, entry: List) -> bool:
+        return entry[2] is not cls.REMOVED
+
+    def iter_active_entries(self) -> Iterator[List]:
+        return (e for e in self.entries if self.entry_is_active(e))
+
+    def update_all_priorities(self,
+                              compute_priority_func: Callable[[List[scrapy.Request]], List[int]]) -> None:
         """
         Update all request priorities.
 
         ``compute_priority_func`` is a function which returns
-        new priority; it should accept a Request and return an integer.
+        new priority; it should accept a list of Requests and return a list of
+        integer priorities.
         """
-        for entry in self.entries:
-            request = entry[2]
-            if request is not self.REMOVED:
-                priority = compute_priority_func(request)
-                self.change_priority(entry, priority)
+        requests = list(self.iter_requests())
+        new_priorities = compute_priority_func(requests)
+        for entry, priority in zip(self.iter_active_entries(), new_priorities):
+            self.change_priority(entry, priority)
         self.heapify()
 
     def remove_entry(self, entry: List) -> scrapy.Request:
@@ -174,7 +182,7 @@ class RequestsPriorityQueue:
         The first request is guaranteed to have top priority;
         order of other requests is arbitrary.
         """
-        return (e[2] for e in self.entries if e[2] != self.REMOVED)
+        return (e[2] for e in self.iter_active_entries())
 
     def __len__(self) -> int:
         return len(self.entries)

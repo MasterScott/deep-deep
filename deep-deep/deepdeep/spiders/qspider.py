@@ -17,7 +17,7 @@ from deepdeep.queues import (
     BalancedPriorityQueue,
     RequestsPriorityQueue,
     score_to_priority,
-    priority_to_score)
+    priority_to_score, FLOAT_PRIORITY_MULTIPLIER)
 from deepdeep.scheduler import Scheduler
 from deepdeep.spiders._base import BaseSpider
 from deepdeep.utils import (
@@ -252,20 +252,29 @@ class QSpider(BaseSpider):
 
     @log_time
     def recalculate_request_priorities(self):
-        # TODO: vectorize
-        def request_priority(request: scrapy.Request) -> int:
-            if self.is_seed(request):
-                return request.priority
+        def request_priorities(requests: List[scrapy.Request]) -> List[int]:
+            priorities = np.ndarray(len(requests), dtype=int)
+            vectors, indices = [], []
+            for idx, request in enumerate(requests):
+                if self.is_seed(request):
+                    priorities[idx] = request.priority
+                    continue
+                vectors.append(request.meta['link_vector'])
+                indices.append(idx)
+            if vectors:
+                scores = self.Q.predict(sp.vstack(vectors))
+                priorities[indices] = scores * FLOAT_PRIORITY_MULTIPLIER
 
-            as_ = request.meta['link_vector']
-            score = self.Q.predict_one(as_)
-            if score > 0.5 and 'link' in request.meta:
-                self._log_promising_link(request.meta['link'], score)
-            return score_to_priority(score)
+            # convert priorities to Python ints because scrapy.Request
+            # doesn't support numpy int types
+            priorities = [p.item() for p in priorities]
+
+            # TODO: use _log_promising_link or remove it
+            return priorities
 
         for slot in tqdm.tqdm(self.scheduler.queue.get_active_slots()):
             queue = self.scheduler.queue.get_queue(slot)
-            queue.update_all_priorities(request_priority)
+            queue.update_all_priorities(request_priorities)
 
     def _log_promising_link(self, link, score):
         self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
