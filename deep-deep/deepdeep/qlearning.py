@@ -368,12 +368,11 @@ class ExperienceMemory:
         """ Add an example to the replay memory """
         self.data.append((as_t, AS_t1, r_t1))
 
-    def sample(self, k: Optional[int]) -> List[Tuple[Any, Any, Any]]:
+    def sample(self, k: int) -> List[Tuple[Any, Any, Any]]:
         """
         Return no more than ``k`` random examples from the memory.
         """
-        if k is None:
-            k = len(self.data)
+        assert k >= 0
         k = min(k, len(self.data))
         return random.sample(self.data, k)
 
