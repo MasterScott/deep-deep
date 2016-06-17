@@ -140,6 +140,11 @@ class QLearner:
         to a higher value to update on each fit_interval-th time step.
     on_model_changed: callable, optional
         Function to call when target :math:`Q(s, a)` function is changed.
+    pickle_memory: bool
+        When True (default), experience replay memory is pickled along
+        with the model; it allows to resume training after unpickling.
+        Set it to False if model is going to be used only for predictions
+        after unpickling; it can save a huge amount of memory.
 
     """
     def __init__(self, *,
@@ -149,7 +154,8 @@ class QLearner:
                  initial_predictions: float = 0.05,
                  replay_sample_size: int = 300,
                  fit_interval: int = 1,
-                 on_model_changed: Optional[Callable[[], None]]=None
+                 on_model_changed: Optional[Callable[[], None]]=None,
+                 pickle_memory: bool = True
                  ) -> None:
         assert 0 <= gamma < 1
         self.double_learning = double_learning
@@ -159,6 +165,7 @@ class QLearner:
         self.replay_sample_size = replay_sample_size
         self.on_model_changed = on_model_changed
         self.fit_interval = fit_interval
+        self.pickle_memory = pickle_memory
 
         self.clf_online = SGDRegressor(
             penalty='l2',
@@ -344,6 +351,8 @@ class QLearner:
     def __getstate__(self):
         dct = self.__dict__.copy()
         del dct['on_model_changed']
+        if not self.pickle_memory:
+            dct['memory'] = ExperienceMemory()
         return dct
 
 

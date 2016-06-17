@@ -116,6 +116,7 @@ class QSpider(BaseSpider):
             gamma=self.gamma,
             double_learning=bool(self.double),
             on_model_changed=self.on_model_changed,
+            pickle_memory=False,
         )
         self.link_vectorizer = LinkVectorizer(
             use_url=bool(self.use_urls),
