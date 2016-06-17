@@ -124,6 +124,9 @@ class QSpider(BaseSpider):
         self.goal = self.get_goal()
 
         self.checkpoint_interval = int(self.checkpoint_interval)
+        self._save_params_json()
+
+    def _save_params_json(self):
         if self.checkpoint_path:
             params = json.dumps(self.get_params(), indent=4)
             print(params)

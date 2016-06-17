@@ -7,7 +7,9 @@ Crawl objective (goal) classes define how is reward computed.
 """
 from __future__ import absolute_import
 import abc
+from typing import Dict, Set, Callable
 from weakref import WeakKeyDictionary
+from collections import defaultdict
 
 from scrapy.http.response.text import TextResponse
 from scrapy.http import Response
@@ -48,6 +50,55 @@ class BaseGoal(metaclass=abc.ABCMeta):
     def debug_print(self) -> None:
         """ Override this method to print debug information during the crawl """
         pass
+
+
+class RelevancyGoal(BaseGoal):
+    """
+    The goal is two-fold:
+
+    1) find new domains which has relevant information;
+    2) find relevant information on a website.
+
+    It is implemented by adding a larger bonus for the first relevant page on
+    a website; this should encourage spider to go to new domains.
+
+    Parameters
+    ----------
+
+    relevancy : callable
+        Function to compute relevancy score for a response. It should
+        accept scrapy.http.Response and return a score (float value).
+        This score is used as reward.
+    discovery_bonus: float
+        If this is a first page on this domain with
+        ``relevancy(response) >= relevancy_threshold`` then
+        `discovery_bonus` is added to the reward. Default value is 10.0.
+    relevancy_threshold: float
+        Minimum relevancy required to give a discovery bonus.
+        See `discovery_bonus`.  Default threshold is 0.7.
+    """
+    def __init__(self,
+                 relevancy: Callable[[Response], float],
+                 relevancy_threshold: float = 0.5,
+                 discovery_bonus: float = 10.0) -> None:
+        self.relevancy = relevancy
+        self.relevancy_threshold = relevancy_threshold
+        self.discovery_bonus = discovery_bonus
+        self.relevant_page_found = defaultdict(lambda: False)  # type: defaultdict
+
+    def get_reward(self, response: Response) -> float:
+        domain = get_response_domain(response)
+        score = self.relevancy(response)
+        if score >= self.relevancy_threshold:
+            if not self.relevant_page_found[domain]:
+                score += self.discovery_bonus
+        return score
+
+    def response_observed(self, response: TextResponse) -> None:
+        if self.relevancy(response) < self.relevancy_threshold:
+            return
+        domain = get_response_domain(response)
+        self.relevant_page_found[domain] = True
 
 
 class FormasaurusGoal(BaseGoal):
