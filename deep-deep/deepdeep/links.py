@@ -39,7 +39,7 @@ def extract_link_dicts(selector, base_url):
             ...
         },
         'inside_text': '<text inside link>',
-        'before_text': '<text preceeding this link>',
+        # 'before_text': '<text preceeding this link>',
     }
     """
     selector.remove_namespaces()
@@ -72,7 +72,7 @@ def extract_link_dicts(selector, base_url):
         link['inside_text'] = ' '.join([link_text, img_link_text]).strip()
 
         # TODO: fix before_text and add after_text
-        link['before_text'] = a.xpath('./preceding::text()[1]').extract_first(default='').strip()[-100:]
+        # link['before_text'] = a.xpath('./preceding::text()[1]').extract_first(default='').strip()[-100:]
 
         yield link
 
