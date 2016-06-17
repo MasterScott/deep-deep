@@ -17,13 +17,10 @@ This module contains custom Scrapy queues which allow to do that:
 sample from them, :class:`RequestsPriorityQueue` is a per-domain queue
 which allows to update request priorities.
 """
-from typing import Dict
-from typing import Set
-
 import heapq
 import itertools
 import random
-from typing import List, Any, Iterable, Optional, Callable
+from typing import List, Any, Iterable, Optional, Callable, Dict, Iterator, Set
 
 import numpy as np
 # from twisted.internet.task import LoopingCall
@@ -215,7 +212,7 @@ class BalancedPriorityQueue:
                  eps: float=0.0,
                  balancing_temperature: float=1.0) -> None:
         assert balancing_temperature > 0
-        self.queues = {}  # type: Dict[str, Optional[RequestsPriorityQueue]]
+        self.queues = {}  # type: Dict[str, RequestsPriorityQueue]
         self.closed_slots = set()  # type: Set[str]
         self.eps = eps
         self.queue_factory = queue_factory
@@ -252,9 +249,9 @@ class BalancedPriorityQueue:
         return request
 
     def get_active_slots(self) -> List[str]:
-        return [key for key, queue in self.queues.items() if queue]
+        return [key for key, queue in self.queues.items() if len(queue)]
 
-    def get_queue(self, slot: str):
+    def get_queue(self, slot: str) -> RequestsPriorityQueue:
         return self.queues[slot]
 
     def close_queue(self, slot: str) -> int:
@@ -274,4 +271,5 @@ class BalancedPriorityQueue:
             yield from q.iter_requests()
 
     def __len__(self) -> int:
-        return sum(len(q) for q in self.queues.values() if q)
+        return sum(len(q) for q in self.queues.values())
+
