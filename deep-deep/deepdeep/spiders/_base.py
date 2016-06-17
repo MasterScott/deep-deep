@@ -2,7 +2,6 @@
 import csv
 import io
 import logging
-import random
 from typing import Optional
 
 import scrapy
@@ -22,7 +21,6 @@ class BaseSpider(scrapy.Spider):
     """
 
     seeds_url = None  # type: Optional[str]
-    random_seed = 0
     response_count = 0
     initial_priority = 5
 
@@ -51,11 +49,6 @@ class BaseSpider(scrapy.Spider):
             raise ValueError("Please pass seeds_url to the spider. It should "
                              "be a text file with urls, one per line.")
         seeds_url = guess_scheme(self.seeds_url)
-
-        # crawer can randomize links to select; make crawl deterministic
-        # FIXME: it doesn't make crawl deterministic because
-        # scrapy is async and pages can be crawled in different order
-        random.seed(int(self.random_seed))
 
         # don't log DepthMiddleware messages
         # see https://github.com/scrapy/scrapy/issues/1308
