@@ -178,10 +178,9 @@ class QSpider(BaseSpider):
 
     def _extract_links(self, response: TextResponse) -> List[Dict]:
         """ Return a list of all unique links on a page """
-        this_domain = get_domain(response.url)
         return list(self.le.iter_link_dicts(
             response=response,
-            domain=this_domain if self.stay_in_domain else None,
+            limit_by_domain=self.stay_in_domain,
             deduplicate=False,
             deduplicate_local=True,
         ))
@@ -190,7 +189,7 @@ class QSpider(BaseSpider):
                            links: List[Dict],
                            links_matrix: sp.csr_matrix,
                            ) -> Iterator[scrapy.Request]:
-        indices_and_links = list(self.le.deduplicate_links(links, indices=True))
+        indices_and_links = list(self.le.deduplicate_links_enumerated(links))
         if not indices_and_links:
             return
         indices, links_to_follow = zip(*indices_and_links)
@@ -278,14 +277,23 @@ class QSpider(BaseSpider):
             ['login', 'http://example.com/users/login'],
             ['forum', 'http://example.com/mybb'],
             ['forums', 'http://example.com/mybb'],
+            ['forums', 'http://other-domain.com/mybb'],
             ['sadhjgrhgsfd', 'http://example.com/new-to-exhibiting/discover-your-stand-position/'],
             ['забыли пароль', 'http://example.com/users/send-password/'],
         ]
         examples_repr = [
-            "{:20s} {}".format(txt, url_path_query(url))
+            "{:20s} {}".format(txt, url)
             for txt, url in examples
         ]
-        links = [{'inside_text': txt, 'url': url} for txt, url in examples]
+        links = [
+            {
+                'inside_text': txt,
+                'url': url,
+                'domain_from': 'example',
+                'domain_to': get_domain(url),
+            }
+            for txt, url in examples
+        ]
         A = self.link_vectorizer.transform(links)
         s = self.page_vectorizer.transform([""]) if self.use_pages else None
         AS = self.Q.join_As(A, s)

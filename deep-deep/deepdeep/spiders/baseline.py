@@ -77,12 +77,12 @@ class CrawlAllSpider(BaseSpider):
         """
 
         # limit crawl to the first domain
-        domain = get_response_domain(response)
-        links = list(self.le.iter_link_dicts(response, domain))
+        links = list(self.le.iter_link_dicts(response, limit_by_domain=True))
 
         if shuffle:
             random.shuffle(links)
 
+        domain = get_response_domain(response)
         for priority, link in zip(decreasing_priority_iter(), links):
             url = link['url']
 
