@@ -11,11 +11,11 @@ from formasaurus.text import normalize
 from deepdeep.utils import url_path_query, html2text, canonicalize_url
 
 
-def LinkVectorizer(use_url: bool=False):
+def LinkVectorizer(use_url: bool=False, use_same_domain: bool=True):
     """
     Vectorizer for converting link dicts to feature vectors.
     """
-    same_domain = FunctionTransformer(_same_domain_feature, validate=False)
+    vectorizers = []
 
     text_vec = HashingVectorizer(
         preprocessor=_link_inside_text,
@@ -26,17 +26,23 @@ def LinkVectorizer(use_url: bool=False):
         analyzer='char',
         ngram_range=(3, 5),
     )
-    if not use_url:
-        return make_union(text_vec, same_domain)
+    vectorizers.append(text_vec)
 
-    url_vec = HashingVectorizer(
-        preprocessor=_clean_url,
-        n_features=1024*1024,
-        binary=True,
-        analyzer='char',
-        ngram_range=(4,5),
-    )
-    return make_union(text_vec, same_domain, url_vec)
+    if use_same_domain:
+        same_domain = FunctionTransformer(_same_domain_feature, validate=False)
+        vectorizers.append(same_domain)
+
+    if use_url:
+        url_vec = HashingVectorizer(
+            preprocessor=_clean_url,
+            n_features=1024*1024,
+            binary=True,
+            analyzer='char',
+            ngram_range=(4,5),
+        )
+        vectorizers.append(url_vec)
+
+    return make_union(*vectorizers)
 
 
 def PageVectorizer():

@@ -43,7 +43,8 @@ class QSpider(BaseSpider):
     """
     name = 'q'
     _ARGS = {
-        'double', 'use_urls', 'use_pages', 'eps', 'balancing_temperature', 'gamma',
+        'double', 'use_urls', 'use_pages', 'use_same_domain',
+        'eps', 'balancing_temperature', 'gamma',
         'replay_sample_size', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
     }
@@ -58,6 +59,9 @@ class QSpider(BaseSpider):
 
     # whether to use URL path/query as a feature
     use_urls = 0
+
+    # whether to use a 'link is to the same domain' feature
+    use_same_domain = 1
 
     # whether to use page content as a feature
     use_pages = 0
@@ -101,6 +105,7 @@ class QSpider(BaseSpider):
         self.gamma = float(self.gamma)
         self.use_urls = bool(int(self.use_urls))
         self.use_pages = int(self.use_pages)
+        self.use_same_domain = int(self.use_same_domain)
         self.double = int(self.double)
         self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
@@ -112,7 +117,10 @@ class QSpider(BaseSpider):
             double_learning=bool(self.double),
             on_model_changed=self.on_model_changed,
         )
-        self.link_vectorizer = LinkVectorizer(use_url=bool(self.use_urls))
+        self.link_vectorizer = LinkVectorizer(
+            use_url=bool(self.use_urls),
+            use_same_domain=bool(self.use_same_domain),
+        )
         self.page_vectorizer = PageVectorizer()
         self.total_reward = 0
         self.model_changes = 0
