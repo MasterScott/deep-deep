@@ -308,6 +308,8 @@ class QSpider(BaseSpider):
         return examples_repr, AS
 
     def log_stats(self):
+        if self.checkpoint_path:
+            print(self.checkpoint_path)
         examples, AS = self._examples()
         if examples:
             scores_target = self.Q.predict(AS)
