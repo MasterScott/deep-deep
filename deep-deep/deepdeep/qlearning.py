@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """
+Q-Learning for Web Crawling
+===========================
+
 Q-learning estimator with linear function approximation,
 experience replay and double learning.
 
@@ -259,7 +262,7 @@ class QLearner:
         Parameters
         ----------
 
-        as_ : array-like, shape (n_action_features + n_state_features,)
+        ``as_`` : array-like, shape (n_action_features + n_state_features,)
             Feature vector for action. If state features are used, state
             feature vector should be appended to the action feature vector.
 

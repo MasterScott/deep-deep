@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+Crawl objectives
+================
+
+Crawl objective (goal) classes define how is reward computed.
+"""
 from __future__ import absolute_import
 import abc
 from weakref import WeakKeyDictionary
@@ -11,15 +17,25 @@ from deepdeep.utils import get_response_domain, MaxScores
 
 
 class BaseGoal(metaclass=abc.ABCMeta):
+    """
+    Abstract base class for crawling objectives.
+    """
 
     @abc.abstractmethod
     def get_reward(self, response: Response) -> float:
-        """ Return a reward for a response """
+        """
+        Return a reward for a response.
+        This method shouldn't update internal goal state;
+        implement :meth:`response_observed` method for that.
+        """
         pass
 
     @abc.abstractmethod
     def response_observed(self, response: TextResponse) -> None:
-        """ Update internal state with the received response """
+        """
+        Update internal state with the received response.
+        This method is called after all :meth:`get_reward` calls.
+        """
         pass
 
     def is_acheived_for(self, domain: str) -> bool:
@@ -36,6 +52,15 @@ class BaseGoal(metaclass=abc.ABCMeta):
 
 class FormasaurusGoal(BaseGoal):
     """
+    The goal is to find a HTML form of a given type on each website.
+    When the form is found, crawling is stopped for a domain.
+
+    ``"password/login recovery"`` forms provide a nice testbed for
+    crawling algorithms because a link to the password recovery page is usually
+    present on a login page, but not on other website pages. So in order to
+    find these forms efficiently crawler must learn to prioritize 'login'
+    links, not only 'password recovery' links.
+
     Parameters
     ----------
 
@@ -62,7 +87,6 @@ class FormasaurusGoal(BaseGoal):
         self._domain_scores = MaxScores()  # domain -> max score
 
     def get_reward(self, response: TextResponse) -> float:
-        """ Return a reward for a response """
         if response not in self._cache:
             if hasattr(response, 'text'):
                 scores = response_max_scores(response)

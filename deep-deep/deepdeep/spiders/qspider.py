@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import abc
 import json
 from pathlib import Path
 from typing import Dict, Tuple, Union, Optional, List, Iterator
@@ -20,10 +19,7 @@ from deepdeep.queues import (
     priority_to_score, FLOAT_PRIORITY_MULTIPLIER)
 from deepdeep.scheduler import Scheduler
 from deepdeep.spiders._base import BaseSpider
-from deepdeep.utils import (
-    set_request_domain,
-    url_path_query,
-)
+from deepdeep.utils import set_request_domain
 from deepdeep.qlearning import QLearner
 from deepdeep.utils import log_time
 from deepdeep.vectorizers import LinkVectorizer, PageVectorizer
