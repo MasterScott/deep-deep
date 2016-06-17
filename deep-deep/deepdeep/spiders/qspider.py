@@ -86,7 +86,7 @@ class QSpider(BaseSpider):
     checkpoint_interval = 1000
 
     # Where to store checkpoints. By default they are not stored.
-    checkpoint_path = None
+    checkpoint_path = None  # type: Optional[str]
 
     # Is spider allowed to follow out-of-domain links?
     # XXX: it is not enough to set this to False; a middleware should be also
@@ -100,8 +100,8 @@ class QSpider(BaseSpider):
         self.balancing_temperature = float(self.balancing_temperature)
         self.gamma = float(self.gamma)
         self.use_urls = bool(int(self.use_urls))
-        self.use_pages = bool(int(self.use_pages))
-        self.double = bool(int(self.double))
+        self.use_pages = int(self.use_pages)
+        self.double = int(self.double)
         self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
@@ -109,10 +109,10 @@ class QSpider(BaseSpider):
             steps_before_switch=self.steps_before_switch,
             replay_sample_size=self.replay_sample_size,
             gamma=self.gamma,
-            double_learning=self.double,
+            double_learning=bool(self.double),
             on_model_changed=self.on_model_changed,
         )
-        self.link_vectorizer = LinkVectorizer(use_url=self.use_urls)
+        self.link_vectorizer = LinkVectorizer(use_url=bool(self.use_urls))
         self.page_vectorizer = PageVectorizer()
         self.total_reward = 0
         self.model_changes = 0

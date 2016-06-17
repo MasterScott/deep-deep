@@ -18,6 +18,7 @@ sample from them, :class:`RequestsPriorityQueue` is a per-domain queue
 which allows to update request priorities.
 """
 from typing import Dict
+from typing import Set
 
 import heapq
 import itertools
@@ -67,7 +68,8 @@ class RequestsPriorityQueue:
     EMPTY_PRIORITY = score_to_priority(-10000)
 
     def __init__(self, fifo: bool=True) -> None:
-        self.entries = []  # type: List[List[int, int, scrapy.Request]]
+        # entries are lists of [int, int, scrapy.Request]
+        self.entries = []  # type: List[List]
         step = 1 if fifo else -1
         self.counter = itertools.count(step=step)
 
@@ -206,7 +208,7 @@ class BalancedPriorityQueue:
                  balancing_temperature: float=1.0) -> None:
         assert balancing_temperature > 0
         self.queues = {}  # type: Dict[str, Optional[RequestsPriorityQueue]]
-        self.closed_slots = set()
+        self.closed_slots = set()  # type: Set[str]
         self.eps = eps
         self.queue_factory = queue_factory
         self.balancing_temperature = balancing_temperature
@@ -255,8 +257,8 @@ class BalancedPriorityQueue:
         Return a number of dropped requests.
         """
         self.closed_slots.add(slot)
-        queue = self.queues.pop(slot, None)
-        return len(queue or [])
+        queue = self.queues.pop(slot, None) or []
+        return len(queue)
 
     def iter_active_requests(self) -> Iterable[scrapy.Request]:
         """ Return an iterator over all requests in a queue """

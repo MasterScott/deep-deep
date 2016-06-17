@@ -31,6 +31,8 @@ class BaseSpider(scrapy.Spider):
         'seeds_url',
     }
 
+    le = None  # type: DictLinkExtractor
+
     def __init__(self, *args, **kwargs):
         self._validate_arguments(kwargs)
         self.le = DictLinkExtractor()

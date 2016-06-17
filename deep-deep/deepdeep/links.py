@@ -3,6 +3,7 @@ import re
 from urllib.parse import urljoin
 from typing import Iterator, Dict, Optional, Set, Iterable, Union, Tuple
 
+from parsel import Selector
 from formasaurus.utils import get_domain
 from scrapy.http import TextResponse
 from scrapy.linkextractors import IGNORED_EXTENSIONS
@@ -16,8 +17,11 @@ _IGNORED = set(IGNORED_EXTENSIONS) | _NEW_IGNORED
 _IGNORED = {'.' + e for e in _IGNORED}
 
 
-js_link_search = re.compile(r"(javascript:)?location\.href=['\"](?P<url>.+)['\"]").search
-def extract_js_link(href):
+_js_link_search = re.compile(
+    r"(javascript:)?location\.href=['\"](?P<url>.+)['\"]").search
+
+
+def extract_js_link(href: str) -> Optional[str]:
     """
     >>> extract_js_link("javascript:location.href='http://www.facebook.com/rivervalleyvet';")
     'http://www.facebook.com/rivervalleyvet'
@@ -26,12 +30,12 @@ def extract_js_link(href):
     >>> extract_js_link("javascript:href='http://www.facebook.com/rivervalleyvet';") is None
     True
     """
-    m = js_link_search(href)
+    m = _js_link_search(href)
     if m:
         return m.group('url')
 
 
-def extract_link_dicts(selector, base_url):
+def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
     """
     Extract dicts with link information::
 
@@ -48,7 +52,7 @@ def extract_link_dicts(selector, base_url):
     selector.remove_namespaces()
 
     for a in selector.xpath('//a'):
-        link = {}
+        link = {}  # type: Dict
 
         attrs = a.root.attrib
         if 'href' not in attrs:

@@ -58,7 +58,7 @@ class FormasaurusGoal(BaseGoal):
     def __init__(self, formtype: str, threshold: float=0.7) -> None:
         self.formtype = formtype
         self.threshold = threshold
-        self._cache = WeakKeyDictionary()
+        self._cache = WeakKeyDictionary()  # type: WeakKeyDictionary
         self._domain_scores = MaxScores()  # domain -> max score
 
     def get_reward(self, response: TextResponse) -> float:
