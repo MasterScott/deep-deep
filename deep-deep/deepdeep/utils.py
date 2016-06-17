@@ -184,7 +184,7 @@ def html2text(html: str) -> str:
     try:
         tree = _cleaned_html_tree(html)
         sel = parsel.Selector(root=tree, type='html')
-    except etree.XMLSyntaxError:
+    except (etree.XMLSyntaxError, etree.ParseError):
         # likely plain text
         sel = parsel.Selector(html)
     return _selector_to_text(sel)
