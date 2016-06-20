@@ -148,6 +148,8 @@ class QLearner:
         with the model; it allows to resume training after unpickling.
         Set it to False if model is going to be used only for predictions
         after unpickling; it can save a huge amount of memory.
+    dummy: bool
+        When True, don't learn anything. Default is False.
 
     """
     def __init__(self, *,
@@ -158,7 +160,8 @@ class QLearner:
                  replay_sample_size: int = 300,
                  fit_interval: int = 1,
                  on_model_changed: Optional[Callable[[], None]]=None,
-                 pickle_memory: bool = True
+                 pickle_memory: bool = True,
+                 dummy: bool = False
                  ) -> None:
         assert 0 <= gamma < 1
         self.double_learning = double_learning
@@ -169,6 +172,7 @@ class QLearner:
         self.on_model_changed = on_model_changed
         self.fit_interval = fit_interval
         self.pickle_memory = pickle_memory
+        self.dummy = dummy
 
         self.clf_online = SGDRegressor(
             penalty='l2',
@@ -214,10 +218,11 @@ class QLearner:
         to the experience replay memory and updates Q functions.
         """
         self.t_ += 1
-        self.memory.add(as_t=as_t, AS_t1=AS_t1, r_t1=r_t1)
+        if not self.dummy:
+            self.memory.add(as_t=as_t, AS_t1=AS_t1, r_t1=r_t1)
 
-        if (self.t_ % self.fit_interval) == 0:
-            self.fit_iteration(self.replay_sample_size)
+            if (self.t_ % self.fit_interval) == 0:
+                self.fit_iteration(self.replay_sample_size)
 
         if (self.t_ % self.steps_before_switch) == 0:
             self._update_target_clf()

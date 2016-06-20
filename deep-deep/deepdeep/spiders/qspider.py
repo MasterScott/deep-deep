@@ -43,10 +43,12 @@ class QSpider(BaseSpider):
         'eps', 'balancing_temperature', 'gamma',
         'replay_sample_size', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
+        'baseline',
     }
     ALLOWED_ARGUMENTS = _ARGS | BaseSpider.ALLOWED_ARGUMENTS
     custom_settings = {
         'DEPTH_LIMIT': 10,
+        'DEPTH_PRIORITY': 1,
         # 'SPIDER_MIDDLEWARES': {
         #     'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
         # }
@@ -93,6 +95,9 @@ class QSpider(BaseSpider):
     # turned off.
     stay_in_domain = True
 
+    # use baseline algorithm (BFS) instead of Q-Learning
+    baseline = False
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -106,6 +111,7 @@ class QSpider(BaseSpider):
         self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
+        self.baseline = bool(int(self.baseline))
         self.Q = QLearner(
             steps_before_switch=self.steps_before_switch,
             replay_sample_size=self.replay_sample_size,
@@ -113,6 +119,7 @@ class QSpider(BaseSpider):
             double_learning=bool(self.double),
             on_model_changed=self.on_model_changed,
             pickle_memory=False,
+            dummy=self.baseline,
         )
         self.link_vectorizer = LinkVectorizer(
             use_url=bool(self.use_urls),
@@ -252,6 +259,9 @@ class QSpider(BaseSpider):
 
     @log_time
     def recalculate_request_priorities(self):
+        if self.baseline:
+            return
+
         def request_priorities(requests: List[scrapy.Request]) -> List[int]:
             priorities = np.ndarray(len(requests), dtype=int)
             vectors, indices = [], []
@@ -377,7 +387,10 @@ class QSpider(BaseSpider):
 
     def get_params(self):
         keys = self._ARGS - {'checkpoint_path', 'checkpoint_interval'}
-        return {key: getattr(self, key) for key in keys}
+        params = {key: getattr(self, key) for key in keys}
+        if getattr(self, 'crawler', None):
+            params['DEPTH_PRIORITY'] = self.crawler.settings.get('DEPTH_PRIORITY')
+        return params
 
     def maybe_checkpoint(self):
         if not self.checkpoint_path:
@@ -398,3 +411,4 @@ class QSpider(BaseSpider):
             '_params': self.get_params(),
         }
         joblib.dump(data, str(path), compress=3)
+        self._save_params_json()
