@@ -265,11 +265,6 @@ class BalancedPriorityQueue:
         queue = self.queues.pop(slot, None) or []
         return len(queue)
 
-    def iter_active_requests(self) -> Iterable[scrapy.Request]:
-        """ Return an iterator over all requests in a queue """
-        for q in self.queues.values():
-            yield from q.iter_requests()
-
     def __len__(self) -> int:
         return sum(len(q) for q in self.queues.values())
 
