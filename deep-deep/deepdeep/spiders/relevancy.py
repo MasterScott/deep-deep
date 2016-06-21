@@ -47,6 +47,20 @@ class RelevancySpider(QSpider):
     keywords_file = None
     keywords = []
 
+    custom_settings = {
+        # copied from QSpider
+        # 'DEPTH_LIMIT': 100,
+        'DEPTH_PRIORITY': 1,
+        'SPIDER_MIDDLEWARES': {
+            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
+        },
+
+        # disable OffsiteDownloaderMiddleware
+        'DOWNLOADER_MIDDLEWARES': {
+           'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': None,
+        },
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.keywords = Path(self.keywords_file).read_text().split()
