@@ -35,11 +35,12 @@ class RelevancySpider(QSpider):
     This spider learns how to crawl relevant pages.
     """
     name = 'relevant'
-    ALLOWED_ARGUMENTS = QSpider.ALLOWED_ARGUMENTS | {'keywords_file'}
-    _ARGS = QSpider._ARGS | {'keywords'}
+    ALLOWED_ARGUMENTS = {'keywords_file', 'discovery_bonus'} | QSpider.ALLOWED_ARGUMENTS
+    _ARGS = QSpider._ARGS | {'keywords', 'discovery_bonus'}
 
     stay_in_domain = False
     use_pages = 1
+    discovery_bonus = 0.0
 
     # a file with keywords
     keywords_file = None
@@ -54,7 +55,8 @@ class RelevancySpider(QSpider):
         return keywords_relevancy(self.keywords, response)
 
     def get_goal(self):
-        return RelevancyGoal(self.relevancy)
+        self.discovery_bonus = float(self.discovery_bonus)
+        return RelevancyGoal(self.relevancy, discovery_bonus=self.discovery_bonus)
 
     def _examples(self):
         return None, None
