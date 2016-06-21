@@ -45,6 +45,7 @@ class CrawlGraphMiddleware(BaseExtension):
             'original url': <request url (before redirects)>,
             'visited': True/False,  # this is False for links which are not visited yet
             'ok': True/False,       # True if response is a HTTP 200 HTML response
+            'priority': <request.priority>
         }
 
     Spider can add more information to node in two ways:
@@ -87,6 +88,7 @@ class CrawlGraphMiddleware(BaseExtension):
             url=response.url,
             visited=True,
             ok=self._response_ok(response),
+            priority=response.request.priority,
         )
         spider.G.add_node(node_id, data)
         logger.debug("VISITED NODE %s %s", node_id, data)
@@ -123,6 +125,7 @@ class CrawlGraphMiddleware(BaseExtension):
         node_data.update(
             url=request.url,
             original_url=request.url,
+            priority=request.priority,
             visited=False,
             ok=None,
         )
