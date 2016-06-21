@@ -7,6 +7,7 @@ import joblib
 import tqdm
 import numpy as np
 import scipy.sparse as sp
+import networkx as nx
 from formasaurus.utils import get_domain
 import scrapy
 from scrapy.http import TextResponse, Response
@@ -49,9 +50,9 @@ class QSpider(BaseSpider):
     custom_settings = {
         'DEPTH_LIMIT': 10,
         'DEPTH_PRIORITY': 1,
-        # 'SPIDER_MIDDLEWARES': {
-        #     'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
-        # }
+        'SPIDER_MIDDLEWARES': {
+            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
+        }
     }
     initial_priority = score_to_priority(5)
 
@@ -148,6 +149,12 @@ class QSpider(BaseSpider):
     def is_seed(self, r: Union[scrapy.Request, Response]) -> bool:
         return 'link_vector' not in r.meta
 
+    def update_node(self, response: Response, data: Dict) -> None:
+        """ Store extra information in crawl graph node """
+        node = self.G.node[response.meta['node_id']]
+        node['t'] = self.Q.t_
+        node.update(data)
+
     def parse(self, response):
         self.increase_response_count()
         self.close_finished_queues()
@@ -173,6 +180,7 @@ class QSpider(BaseSpider):
                 AS_t1=None,
                 r_t1=0
             )
+            self.update_node(response, {'reward': 0})
             return []
 
         page_vector = self._get_page_vector(response)
@@ -182,6 +190,7 @@ class QSpider(BaseSpider):
 
         if not self.is_seed(response):
             reward = self.goal.get_reward(response)
+            self.update_node(response, {'reward': reward})
             self.total_reward += reward
             self.Q.add_experience(
                 as_t=as_t,
@@ -393,13 +402,20 @@ class QSpider(BaseSpider):
         return params
 
     def maybe_checkpoint(self):
-        if not self.checkpoint_path:
-            return
         if (self.Q.t_ % self.checkpoint_interval) != 0:
             return
+        self.do_checkpoint()
+
+    def do_checkpoint(self):
+        if not self.checkpoint_path:
+            return
         path = Path(self.checkpoint_path)
-        filename = "Q-%s.joblib" % self.Q.t_
-        self.dump_policy(path.joinpath(filename))
+        self.dump_policy(path/("Q-%s.joblib" % self.Q.t_))
+        self.dump_crawl_graph(path/"graph.pickle")
+
+    @log_time
+    def dump_crawl_graph(self, path):
+        nx.write_gpickle(self.G, str(path))
 
     @log_time
     def dump_policy(self, path):
