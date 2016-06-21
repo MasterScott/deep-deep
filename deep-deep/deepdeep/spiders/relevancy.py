@@ -2,11 +2,30 @@
 from __future__ import absolute_import
 import math
 from pathlib import Path
+from typing import List
 
 from scrapy.http import Response
+
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal
 from deepdeep.utils import html2text
+
+
+def keywords_relevancy(keywords: List[str], response: Response):
+    """
+    Relevancy score based on how many keywords from a list are
+    in response text.
+
+    Score is transformed using a weird log scale (fixme)
+    to *roughly* fit [0,1] interval and to not require all keywords to be
+    present for a page to be relevant.
+    """
+    if not hasattr(response, 'text'):
+        return 0.0
+    text = html2text(response.text).lower()
+    score = sum(1.0 if keyword in text else 0.0 for keyword in keywords)
+    score = math.log(score + 1, len(keywords) / 2)
+    return score
 
 
 class RelevancySpider(QSpider):
@@ -30,12 +49,7 @@ class RelevancySpider(QSpider):
         self._save_params_json()
 
     def relevancy(self, response: Response) -> float:
-        if not hasattr(response, 'text'):
-            return 0.0
-        text = html2text(response.text).lower()
-        score = sum(1.0 if keyword in text else 0.0 for keyword in self.keywords)
-        score = math.log(score + 1, len(self.keywords) / 2)
-        return score
+        return keywords_relevancy(self.keywords, response)
 
     def get_goal(self):
         return RelevancyGoal(self.relevancy)
