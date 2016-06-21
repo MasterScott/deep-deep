@@ -40,6 +40,7 @@ class RelevancySpider(QSpider):
 
     stay_in_domain = False
     use_pages = 1
+    balancing_temperature = 0.1
     discovery_bonus = 0.0
 
     # a file with keywords
