@@ -9,6 +9,7 @@ from scrapy.http import Response
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal
 from deepdeep.utils import html2text
+from formasaurus.text import tokenize
 
 
 def keywords_relevancy(keywords: List[str], response: Response):
@@ -23,7 +24,8 @@ def keywords_relevancy(keywords: List[str], response: Response):
     if not hasattr(response, 'text'):
         return 0.0
     text = html2text(response.text).lower()
-    score = sum(1.0 if keyword in text else 0.0 for keyword in keywords)
+    tokens = set(tokenize(text))
+    score = sum(1.0 if keyword in tokens else 0.0 for keyword in keywords)
     score = math.log(score + 1, len(keywords) / 2)
     return score
 
