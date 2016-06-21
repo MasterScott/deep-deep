@@ -65,14 +65,14 @@ class CrawlGraphMiddleware(BaseExtension):
         self.crawler.signals.connect(self.on_spider_closed,
                                      signals.spider_closed)
 
-        self.filename = self.crawler.settings.get('GRAPH_FILENAME',
-                                                  'graph.pickle')
+        self.filename = self.crawler.settings.get('GRAPH_FILENAME', None)
 
         # HACKHACKHACK
         self.dupefilter = RFPDupeFilter()
 
     def on_spider_closed(self):
-        nx.write_gpickle(self.G, self.filename)
+        if self.filename:
+            nx.write_gpickle(self.G, self.filename)
 
     def process_spider_input(self, response, spider):
         """
