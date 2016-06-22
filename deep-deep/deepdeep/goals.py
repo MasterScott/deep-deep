@@ -27,8 +27,9 @@ class BaseGoal(metaclass=abc.ABCMeta):
     def get_reward(self, response: Response) -> float:
         """
         Return a reward for a response.
-        This method shouldn't update internal goal state;
-        implement :meth:`response_observed` method for that.
+        This method may be called several times; it shouldn't update
+        internal goal state. Implement :meth:`response_observed` method
+        to update internal goal state.
         """
         pass
 
@@ -42,7 +43,7 @@ class BaseGoal(metaclass=abc.ABCMeta):
 
     def is_acheived_for(self, domain: str) -> bool:
         """
-        This method should return True if spider should stop
+        This method should return True if a spider should stop
         processing the website.
         """
         return False
@@ -59,8 +60,26 @@ class RelevancyGoal(BaseGoal):
     1) find new domains which has relevant information;
     2) find relevant information on a website.
 
-    It is implemented by adding a larger bonus for the first relevant page on
-    a website; this should encourage spider to go to new domains.
+    In order to prioritize (1) over (2) RelevancyGoal provides
+    several options:
+
+    a) it can stop crawling a domain after a certain
+       number of pages (see ``max_requests_per_domain``);
+    b) it can stop crawling a domain after a certain amount of relevant pages
+       (see ``max_relevant_pages_per_domain`` and ``relevancy_threshold``);
+    c) it can add a larger bonus for the first relevant page on
+       a website; this should encourage spider to go to new domains
+       (see ``discovery_bonus`` and ``relevancy_threshold``).
+
+    Based on experiments it looks like (a) and (b) works, but (c) doesn't.
+
+    The idea behind (a) and (b) limits is to stop crawling a website after
+    we're sure it is relevant, to free up resources for other websites.
+
+    The difference between (a) and (b) is in how spider handles 'hub' websites
+    with no relevant content, but with lots of links to other domains
+    with relevant content: with (b) spider will keep crawling these hubs,
+    while with (a) it won't.
 
     Parameters
     ----------
@@ -68,37 +87,67 @@ class RelevancyGoal(BaseGoal):
     relevancy : callable
         Function to compute relevancy score for a response. It should
         accept scrapy.http.Response and return a score (float value).
-        This score is used as reward.
+        This score is used as a reward.
+    max_requests_per_domain: int, optional
+        Maximum number of requests to send to a single domain, or None
+        if there is no limit. Default is None.
+    max_relevant_pages_per_domain: float, optional
+        Maximum number of reward accumulated for a single domain, or None
+        if there is no limit. Default is None.
+    relevancy_threshold: float
+        Minimum relevancy required to give a discovery bonus or to increase
+        relevant pages count. See `discovery_bonus` and
+        `max_relevant_pages_per_domain`.  Default threshold is 0.1.
     discovery_bonus: float
         If this is a first page on this domain with
         ``relevancy(response) >= relevancy_threshold`` then
-        `discovery_bonus` is added to the reward. Default value is 10.0.
-    relevancy_threshold: float
-        Minimum relevancy required to give a discovery bonus.
-        See `discovery_bonus`.  Default threshold is 0.7.
+        `discovery_bonus` is added to the reward. Default value is 0.0.
     """
     def __init__(self,
                  relevancy: Callable[[Response], float],
-                 relevancy_threshold: float = 0.5,
-                 discovery_bonus: float = 10.0) -> None:
+                 max_requests_per_domain: int = None,
+                 max_relevant_pages_per_domain: float = None,
+                 discovery_bonus: float = 0.0,
+                 relevancy_threshold: float = 0.1
+                 ) -> None:
         self.relevancy = relevancy
         self.relevancy_threshold = relevancy_threshold
         self.discovery_bonus = discovery_bonus
-        self.relevant_page_found = defaultdict(lambda: False)  # type: defaultdict
+        self.max_requests_per_domain = max_requests_per_domain
+        self.max_relevant_pages_per_domain = max_relevant_pages_per_domain
+
+        self.request_count = defaultdict(int)  # type: defaultdict
+        self.relevant_pages_found = defaultdict(int)  # type: defaultdict
 
     def get_reward(self, response: Response) -> float:
         domain = get_response_domain(response)
         score = self.relevancy(response)
         if score >= self.relevancy_threshold:
-            if not self.relevant_page_found[domain]:
+            if not self.relevant_pages_found[domain]:
                 score += self.discovery_bonus
         return score
 
     def response_observed(self, response: TextResponse) -> None:
-        if self.relevancy(response) < self.relevancy_threshold:
-            return
         domain = get_response_domain(response)
-        self.relevant_page_found[domain] = True
+        self.request_count[domain] += 1
+        if self.relevancy(response) >= self.relevancy_threshold:
+            self.relevant_pages_found[domain] += 1
+
+    def is_acheived_for(self, domain: str):
+        return (
+            self._max_requests_reached(domain) or
+            self._max_relevant_pages_reached(domain)
+        )
+
+    def _max_requests_reached(self, domain: str) -> bool:
+        if self.max_requests_per_domain is None:
+            return False
+        return self.request_count[domain] >= self.max_requests_per_domain
+
+    def _max_relevant_pages_reached(self, domain: str) -> bool:
+        if self.max_relevant_pages_per_domain is None:
+            return False
+        return self.relevant_pages_found[domain] >= self.max_relevant_pages_per_domain
 
 
 class FormasaurusGoal(BaseGoal):
