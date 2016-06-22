@@ -19,7 +19,7 @@ def crawl():
     log_path = res_dir.joinpath("spider.log")
     stats_path = res_dir.joinpath("stats.jl")
     args = [
-        "scrapy", "crawl", "q",
+        "scrapy", "crawl", "forms",
         "-a", "seeds_url=%s" % in_file.absolute(),
         "-a", "checkpoint_path=%s" % res_dir.absolute(),
         "-o", str(stats_path),

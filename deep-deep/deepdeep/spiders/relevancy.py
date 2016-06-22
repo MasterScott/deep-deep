@@ -93,6 +93,3 @@ class RelevancySpider(QSpider):
             max_requests_per_domain=self.max_requests_per_domain,
             max_relevant_pages_per_domain=self.max_relevant_pages_per_domain,
         )
-
-    def _examples(self):
-        return None, None
