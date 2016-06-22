@@ -8,7 +8,7 @@ import networkx as nx
 import scrapy
 from scrapy import signals
 from scrapy.dupefilters import RFPDupeFilter
-
+from scrapy.exceptions import NotConfigured
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +59,16 @@ class CrawlGraphMiddleware(BaseExtension):
     with non-empty ``request.meta['edge_data']`` dicts.
     """
     def init(self):
+        if not self.crawler.settings.getbool('CRAWLGRAPH_ENABLED', True):
+            raise NotConfigured()
+
         # fixme: it should be in spider state
         self.crawler.spider.G = self.G = nx.DiGraph(name='Crawl Graph')
         self.node_ids = itertools.count()
         self.crawler.signals.connect(self.on_spider_closed,
                                      signals.spider_closed)
 
-        self.filename = self.crawler.settings.get('GRAPH_FILENAME', None)
+        self.filename = self.crawler.settings.get('CRAWLGRAPH_FILENAME', None)
 
         # HACKHACKHACK
         self.dupefilter = RFPDupeFilter()

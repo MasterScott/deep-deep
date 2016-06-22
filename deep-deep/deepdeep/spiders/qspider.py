@@ -152,6 +152,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     def update_node(self, response: Response, data: Dict) -> None:
         """ Store extra information in crawl graph node """
+        if not hasattr(self, 'G'):
+            return
         node = self.G.node[response.meta['node_id']]
         node['t'] = self.Q.t_
         node.update(data)
@@ -384,7 +386,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     @log_time
     def dump_crawl_graph(self, path):
-        nx.write_gpickle(self.G, str(path))
+        if hasattr(self, 'G'):
+            nx.write_gpickle(self.G, str(path))
 
     @log_time
     def dump_policy(self, path):
