@@ -152,7 +152,22 @@ def log_time(func):
     return wrapper
 
 
-_clean_html = Cleaner(javascript=True, style=True).clean_html
+_clean_html = Cleaner(
+    scripts=True,
+    javascript=False,  # onclick attributes are fine
+    comments=True,
+    style=True,
+    links=True,
+    meta=True,
+    page_structure=False,  # <title> may be nice to have
+    processing_instructions=True,
+    embedded=True,
+    frames=True,
+    forms=False,  # keep forms
+    annoying_tags=False,
+    remove_unknown_tags=False,
+    safe_attrs_only=False,
+).clean_html
 
 
 def _cleaned_html_tree(html: str) -> lxml.html.HtmlElement:
@@ -169,12 +184,12 @@ def html2text(html: str) -> str:
     """
     Convert html to text.
 
-    >>> html = '<html><body><style>.div {}</style><p>Hello,   world!</body></html>'
+    >>> html = '<html><style>.div {}</style><body><p>Hello,   world!</body></html>'
     >>> html2text(html)
     'Hello, world!'
 
     It works with XHTML declared ecodings:
-    >>> html = '<?xml version="1.0" encoding="utf-8" ?><html><body><style>.div {}</style>Hello,   world!</p></body></html>'
+    >>> html = '<?xml version="1.0" encoding="utf-8" ?><html><style>.div {}</style><body>Hello,   world!</p></body></html>'
     >>> html2text(html)
     'Hello, world!'
 
