@@ -231,7 +231,7 @@ class BalancedPriorityQueue:
         if not keys:
             return
 
-        random_policy = self.eps and random.random() < self.eps
+        random_policy = random.random() < (self.eps or 0.0)
         # if random_policy:
         #     print("ε", end=' ')
 
