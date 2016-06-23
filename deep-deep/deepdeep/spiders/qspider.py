@@ -234,7 +234,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             next_domain = get_domain(url)
             meta = {
                 'link_vector': v,
-                'link': link,  # FIXME: turn it off for production
+                # 'link': link,  # turn it on for debugging
                 'scheduler_slot': next_domain,
             }
             priority = score_to_priority(score)
