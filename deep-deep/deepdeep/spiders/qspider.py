@@ -155,21 +155,29 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         node['t'] = self.Q.t_
         node.update(data)
 
-    def parse(self, response):
+    def parse(self, response: Response):
         self.increase_response_count()
         self.close_finished_queues()
         self._debug_expected_vs_got(response)
-        output = self._parse(response)
-        if not self.is_seed(response):
-            self.log_stats()
-            self.maybe_checkpoint()
-            yield self.get_stats_item()
+        output, reward = self._parse(response)
+        self.log_stats()
+        self.maybe_checkpoint()
+
+        stats = self.get_stats_item()
+        stats['is_seed'] = self.is_seed(response)
+        stats['reward'] = reward
+        stats['url'] = response.url
+        stats['Q'] = priority_to_score(response.request.priority)
+        stats['eps-policy'] = response.request.meta.get('from_random_policy', None)
+        yield stats
+
         yield from output
 
+    @log_time
     def _parse(self, response):
         if self.is_seed(response) and not hasattr(response, 'text'):
             # bad seed
-            return []
+            return [], 0
 
         as_t = response.meta.get('link_vector')
 
@@ -181,13 +189,14 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 r_t1=0
             )
             self.update_node(response, {'reward': 0})
-            return []
+            return [], 0
 
         page_vector = self._get_page_vector(response)
         links = self._extract_links(response)
         links_matrix = self.link_vectorizer.transform(links) if links else None
         links_matrix = self.Q.join_As(links_matrix, page_vector)
 
+        reward = 0
         if not self.is_seed(response):
             reward = self.goal.get_reward(response)
             self.update_node(response, {'reward': reward})
@@ -198,7 +207,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 r_t1=reward
             )
             self.goal.response_observed(response)
-        return list(self._links_to_requests(links, links_matrix))
+        return list(self._links_to_requests(links, links_matrix)), reward
 
     def _extract_links(self, response: TextResponse) -> List[Dict]:
         """ Return a list of all unique links on a page """
