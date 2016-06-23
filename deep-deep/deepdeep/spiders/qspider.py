@@ -318,7 +318,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             self.total_reward,
             self.total_reward / self.Q.t_ if self.Q.t_ else 0,
             self.Q.coef_norm(online=True),
-            self.Q.coef_norm()
+            self.Q.coef_norm(online=False),
         ))
         self.goal.debug_print()
 
