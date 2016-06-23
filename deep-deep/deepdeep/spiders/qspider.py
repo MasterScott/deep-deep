@@ -370,7 +370,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         return params
 
     def maybe_checkpoint(self):
-        if (self.Q.t_ % self.checkpoint_interval) != 0:
+        if (self.Q.t_ % self.checkpoint_interval) != 0 or self.Q.t_ == 0:
             return
         self.do_checkpoint()
 
