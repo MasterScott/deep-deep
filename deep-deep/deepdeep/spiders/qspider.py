@@ -52,9 +52,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     custom_settings = {
         # 'DEPTH_LIMIT': 100,
         'DEPTH_PRIORITY': 1,
-        'SPIDER_MIDDLEWARES': {
-            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
-        }
     }
     initial_priority = score_to_priority(5)
 

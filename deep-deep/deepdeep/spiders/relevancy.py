@@ -63,9 +63,6 @@ class RelevancySpider(QSpider):
         # copied from QSpider
         # 'DEPTH_LIMIT': 100,
         'DEPTH_PRIORITY': 1,
-        'SPIDER_MIDDLEWARES': {
-            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
-        },
 
         # disable OffsiteDownloaderMiddleware
         'DOWNLOADER_MIDDLEWARES': {

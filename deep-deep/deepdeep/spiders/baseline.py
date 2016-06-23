@@ -29,9 +29,8 @@ class CrawlAllSpider(BaseSpider):
     custom_settings = {
         'DEPTH_LIMIT': 1,  # override it using -s DEPTH_LIMIT=2
         'DEPTH_PRIORITY': 1,
-        'SPIDER_MIDDLEWARES': {
-            'deepdeep.spidermiddlewares.CrawlGraphMiddleware': 400,
-        }
+        'CRAWLGRAPH_ENABLED': True,
+        'CRAWLGRAPH_FILENAME': 'graph.pickle',
     }
 
     ALLOWED_ARGUMENTS = {'shuffle', 'heuristic'} | BaseSpider.ALLOWED_ARGUMENTS
