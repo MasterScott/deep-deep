@@ -54,6 +54,7 @@ class RelevancySpider(QSpider):
     discovery_bonus = 0.0
     max_requests_per_domain = None
     max_relevant_pages_per_domain = None
+    replay_sample_size = 50
 
     # a file with keywords
     keywords_file = None
