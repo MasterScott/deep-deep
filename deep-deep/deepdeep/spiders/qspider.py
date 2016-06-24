@@ -26,6 +26,7 @@ from deepdeep.qlearning import QLearner
 from deepdeep.utils import log_time
 from deepdeep.vectorizers import LinkVectorizer, PageVectorizer
 from deepdeep.goals import BaseGoal
+from deepdeep.metrics import ndcg_score
 
 
 class QSpider(BaseSpider, metaclass=abc.ABCMeta):
@@ -280,10 +281,15 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         if self.baseline:
             return
 
+        scores_new = []
+        scores_old = []
+
         def request_priorities(requests: List[scrapy.Request]) -> List[int]:
             priorities = np.ndarray(len(requests), dtype=int)
+            old_priorities = np.zeros_like(priorities)
             vectors, indices = [], []
             for idx, request in enumerate(requests):
+                old_priorities[idx] = request.priority
                 if self.is_seed(request):
                     priorities[idx] = request.priority
                     continue
@@ -292,6 +298,10 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             if vectors:
                 scores = self.Q.predict(sp.vstack(vectors))
                 priorities[indices] = scores * FLOAT_PRIORITY_MULTIPLIER
+
+            # keep scores in order to compute metrics later
+            scores_new.append(priorities / FLOAT_PRIORITY_MULTIPLIER)
+            scores_old.append(old_priorities / FLOAT_PRIORITY_MULTIPLIER)
 
             # convert priorities to Python ints because scrapy.Request
             # doesn't support numpy int types
@@ -303,6 +313,58 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         for slot in tqdm.tqdm(self.scheduler.queue.get_active_slots()):
             queue = self.scheduler.queue.get_queue(slot)
             queue.update_all_priorities(request_priorities)
+
+        # Compute & print metrics.
+        # The idea is to check how stable are results:
+        #
+        # 1. how different is domain ranking after model update?
+        # 2. how different is request ranking after model update?
+        #
+        # For requests we're only interested in top N requests
+        # (for each domain?); low-priority requests don't matter.
+        #
+        # For domains we're also interested mostly in top domains.
+        #
+        domain_scores_old = np.array([p.max() if p.size else 0 for p in scores_old])
+        domain_scores_new = np.array([p.max() if p.size else 0 for p in scores_new])
+        scores_old_all = np.hstack(scores_old)
+        scores_new_all = np.hstack(scores_new)
+
+        print("Top-100 domain ranking: NDSG={:0.4f}".format(
+            ndcg_score(domain_scores_new, domain_scores_old, k=100)
+        ))
+
+        print("Top-100 request ranking: NDSG={:0.4f}".format(
+            ndcg_score(scores_new_all, scores_old_all, k=100)
+        ))
+
+        # fixme: something is wrong with this micro-averaging,
+        # sometimes it returns values > 1
+        domain_ndsg = np.array([
+            ndcg_score(new, old, k=10)
+            for new, old in zip(scores_new, scores_old)
+        ])
+        mean_domain_ndsg = domain_ndsg[~np.isnan(domain_ndsg)].mean()
+        print("Top-10 micro-averaged in-domain request ranking: NDSG={:0.4f}".format(
+            mean_domain_ndsg
+        ))
+
+        diff = scores_new_all - scores_old_all
+        rmse = np.sqrt((diff ** 2).sum() / diff.size)
+        mean_abs_error = np.abs(diff).mean()
+        print("Request score changes: RMSE={:0.4f}, MAE={:0.4}".format(
+            rmse, mean_abs_error
+        ))
+
+        if __name__ == '__main__':
+            for threshold in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+                changed = np.abs(diff) > threshold
+                print("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
+                    threshold, changed.sum(), changed.mean(),
+                ))
+
+            # TODO: ranking metric other than NDSG
+            # It shouldn't matter that much if a request is 1st or 10th in a queue
 
     def _log_promising_link(self, link, score):
         self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
@@ -322,7 +384,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             for ex, score1, score2 in zip(examples, scores_target, scores_online):
                 print(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
 
-        print("t={}, return={:0.4f}, avg return={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
+        print("t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
             self.Q.t_,
             self.total_reward,
             self.total_reward / self.Q.t_ if self.Q.t_ else 0,
