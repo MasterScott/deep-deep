@@ -356,15 +356,14 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             rmse, mean_abs_error
         ))
 
-        if __name__ == '__main__':
-            for threshold in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
-                changed = np.abs(diff) > threshold
-                print("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
-                    threshold, changed.sum(), changed.mean(),
-                ))
+        for threshold in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
+            changed = np.abs(diff) > threshold
+            print("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
+                threshold, changed.sum(), changed.mean(),
+            ))
 
-            # TODO: ranking metric other than NDSG
-            # It shouldn't matter that much if a request is 1st or 10th in a queue
+        # TODO: ranking metric other than NDSG
+        # It shouldn't matter that much if a request is 1st or 10th in a queue
 
     def _log_promising_link(self, link, score):
         self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
