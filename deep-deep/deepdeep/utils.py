@@ -31,21 +31,6 @@ def dict_aggregate_max(*dicts):
     return res
 
 
-def dict_subtract(d1, d2):
-    """
-    Subtract values in d2 from values in d1.
-
-    >>> d1 = {'x': 1, 'y': 2, 'z': 3}
-    >>> d2 = {'x': 2, 'y': 1, 'w': 3}
-    >>> dict_subtract(d1, d2) == {'x': -1, 'y': 1, 'z': 3, 'w': -3}
-    True
-    """
-    res = d1.copy()
-    for k, v in d2.items():
-        res[k] = res.get(k, 0) - v
-    return res
-
-
 def get_response_domain(response):
     return response.meta.get('domain', get_domain(response.url))
 
