@@ -31,6 +31,7 @@ setup(
         'scrapy >= 1.1',
         'scikit-learn >= 0.17.1',
         'joblib',
-        'formasaurus',  # fixme: remove it
+        'numpy',
+        'formasaurus[with_deps]',  # fixme: remove it
     ],
 )

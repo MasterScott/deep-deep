@@ -4,3 +4,5 @@ scikit-learn==0.17.1
 joblib
 formasaurus
 psutil
+numpy
+formasaurus[with_deps]
