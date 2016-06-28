@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import csv
 import io
 import logging
 from typing import Optional
@@ -63,11 +62,19 @@ class BaseSpider(scrapy.Spider):
         yield scrapy.Request(seeds_url, self._parse_seeds, dont_filter=True,
                              meta={'dont_obey_robotstxt': True})
 
-    def _parse_seeds(self, response):
-        for url, in csv.reader(io.StringIO(response.text)):
+    def _get_urls(self, fp):
+        for row in fp:
+            url = row.strip()
+            if not url:
+                continue
             if url == 'url':
                 continue  # optional header
             url = add_http_if_no_scheme(url)
+            yield url
+
+    def _parse_seeds(self, response):
+        urls = list(self._get_urls(io.StringIO(response.text)))
+        for url in urls:
             yield scrapy.Request(url, self.parse, priority=self.initial_priority)
 
     def increase_response_count(self):
