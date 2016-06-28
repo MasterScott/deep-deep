@@ -44,7 +44,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     """
     _ARGS = {
-        'double', 'use_urls', 'use_pages', 'use_same_domain',
+        'double', 'use_urls', 'use_full_urls', 'use_pages', 'use_same_domain',
         'eps', 'balancing_temperature', 'gamma',
         'replay_sample_size', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
@@ -57,8 +57,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     }
     initial_priority = score_to_priority(5)
 
-    # whether to use URL path/query as a feature
+    # whether to use URL path/query or a full URL as a feature
     use_urls = 0
+    use_full_urls = 0
 
     # whether to use a 'link is to the same domain' feature
     use_same_domain = 1
@@ -107,6 +108,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.balancing_temperature = float(self.balancing_temperature)
         self.gamma = float(self.gamma)
         self.use_urls = bool(int(self.use_urls))
+        self.use_full_urls = bool(int(self.use_full_urls))
         self.use_pages = int(self.use_pages)
         self.use_same_domain = int(self.use_same_domain)
         self.double = int(self.double)
@@ -125,6 +127,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         )
         self.link_vectorizer = LinkVectorizer(
             use_url=bool(self.use_urls),
+            use_full_url=bool(self.use_full_urls),
             use_same_domain=bool(self.use_same_domain),
         )
         self.page_vectorizer = PageVectorizer()

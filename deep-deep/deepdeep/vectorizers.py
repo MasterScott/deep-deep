@@ -11,10 +11,16 @@ from formasaurus.text import normalize
 from deepdeep.utils import url_path_query, html2text, canonicalize_url
 
 
-def LinkVectorizer(use_url: bool=False, use_same_domain: bool=True):
+def LinkVectorizer(use_url: bool=False,
+                   use_full_url: bool=False,
+                   use_same_domain: bool=True
+                   ):
     """
     Vectorizer for converting link dicts to feature vectors.
     """
+    if use_url and use_full_url:
+        raise ValueError("``use_url`` and ``use_full_url`` can't be both True")
+
     vectorizers = []
 
     text_vec = HashingVectorizer(
@@ -32,13 +38,14 @@ def LinkVectorizer(use_url: bool=False, use_same_domain: bool=True):
         same_domain = FunctionTransformer(_same_domain_feature, validate=False)
         vectorizers.append(same_domain)
 
-    if use_url:
+    if use_url or use_full_url:
+        preprocessor = _clean_url if use_url else _clean_url_keep_domain
         url_vec = HashingVectorizer(
-            preprocessor=_clean_url,
+            preprocessor=preprocessor,
             n_features=1024*1024,
             binary=True,
             analyzer='char',
-            ngram_range=(4,5),
+            ngram_range=(4, 5),
         )
         vectorizers.append(url_vec)
 
@@ -62,8 +69,12 @@ def _link_inside_text(link: Dict):
     return normalize(text + ' ' + title)
 
 
-def _clean_url(link: Dict):
-    return url_path_query(canonicalize_url(link.get('url')))
+def _clean_url(link: Dict) -> str:
+    return url_path_query(_clean_url_keep_domain(link))
+
+
+def _clean_url_keep_domain(link: Dict) -> str:
+    return canonicalize_url(link.get('url'))
 
 
 def _same_domain_feature(links):
