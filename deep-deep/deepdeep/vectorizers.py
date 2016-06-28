@@ -63,7 +63,7 @@ def PageVectorizer():
     return text_vec
 
 
-def _link_inside_text(link: Dict):
+def _link_inside_text(link: Dict) -> str:
     text = link.get('inside_text', '')
     title = link.get('attrs', {}).get('title', '')
     return normalize(text + ' ' + title)

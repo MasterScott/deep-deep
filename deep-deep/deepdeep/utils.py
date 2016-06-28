@@ -9,8 +9,8 @@ from urllib.parse import urlsplit
 import numpy as np
 import parsel
 import lxml.html
-from lxml import etree
-from lxml.html.clean import Cleaner
+from lxml import etree  # type: ignore
+from lxml.html.clean import Cleaner  # type: ignore
 from formasaurus.utils import get_domain
 from scrapy.utils.url import canonicalize_url as _canonicalize_url
 
@@ -49,7 +49,7 @@ def decreasing_priority_iter(N=5):
         yield priority
 
 
-def url_path_query(url):
+def url_path_query(url: str) -> str:
     """
     Return URL path and query, without domain, scheme and fragment:
 
@@ -191,5 +191,5 @@ def html2text(html: str) -> str:
 
 
 @functools.lru_cache(maxsize=100000)
-def canonicalize_url(url):
+def canonicalize_url(url: str) -> str:
     return _canonicalize_url(url)

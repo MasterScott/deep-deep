@@ -20,7 +20,11 @@ which allows to update request priorities.
 import heapq
 import itertools
 import random
-from typing import List, Any, Iterable, Optional, Callable, Dict, Iterator, Set
+import csv
+from typing import (
+    List, Any, Iterable, Optional, Callable, Dict, Iterator, Set, TextIO,
+    Sized,
+)
 
 import numpy as np
 # from twisted.internet.task import LoopingCall
@@ -43,7 +47,7 @@ class QueueClosed(Exception):
     pass
 
 
-class RequestsPriorityQueue:
+class RequestsPriorityQueue(Sized):
     """
     In-memory priority queue for requests.
 
@@ -168,7 +172,7 @@ class RequestsPriorityQueue:
         heapq.heapify(self.entries)
         self._pop_empty()
 
-    def _pop_empty(self):
+    def _pop_empty(self) -> None:
         """ Pop all removed entries from heap top """
         while self.entries and self.next_request is self.REMOVED:
             heapq.heappop(self.entries)

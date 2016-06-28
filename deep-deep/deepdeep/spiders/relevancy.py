@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 import math
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from scrapy.http import Response
 from formasaurus.text import tokenize, token_ngrams
@@ -35,14 +35,14 @@ class RelevancySpider(QSpider):
     use_pages = 1
     balancing_temperature = 0.1
     discovery_bonus = 0.0
-    max_requests_per_domain = None
-    max_relevant_pages_per_domain = None
+    max_requests_per_domain = None  # type: Optional[int]
+    max_relevant_pages_per_domain = None  # type: Optional[int]
     replay_sample_size = 50
 
     # a file with keywords
-    keywords_file = None
-    pos_keywords = []
-    neg_keywords = []
+    keywords_file = None   # type: str
+    pos_keywords = []      # type: List[str]
+    neg_keywords = []      # type: List[str]
 
     custom_settings = {
         # copied from QSpider

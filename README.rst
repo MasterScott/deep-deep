@@ -12,6 +12,9 @@ Testing
 
 To run tests, execute the following command from the source root::
 
-    ./runtests.sh
+    ./check.sh
 
-It requires Python 3.5+.
+It requires Python 3.5+, pytest_ and `mypy-lang`_.
+
+.. _pytest: http://pytest.org/latest/
+.. _mypy-lang: http://mypy-lang.org/
