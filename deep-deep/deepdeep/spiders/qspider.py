@@ -168,7 +168,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self._debug_expected_vs_got(response)
         output, reward = self._parse(response)
         self.log_stats()
-        self.maybe_checkpoint()
+
+        if not self.is_seed(response):
+            # timestep is not increased for seed urls, so
+            # making checkpoint for them can lead to duplicate work
+            self.maybe_checkpoint()
 
         stats = self.get_stats_item()
         stats['ts'] = time.time()
