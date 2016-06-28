@@ -67,6 +67,9 @@ def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
             href = js_link
             link['js'] = True
 
+        if href.startswith(('tel:', 'skype:', 'fb:', 'javascript:')):
+            continue
+
         url = urljoin(base_url, href)
         if url_has_any_extension(url, _IGNORED):
             continue
