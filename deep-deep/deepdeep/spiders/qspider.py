@@ -2,10 +2,10 @@
 import json
 from pathlib import Path
 from typing import Dict, Tuple, Union, Optional, List, Iterator
-
 import abc
 import joblib
 import time
+
 import tqdm
 import numpy as np
 import scipy.sparse as sp
@@ -465,6 +465,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         path = Path(self.checkpoint_path)
         self.dump_policy(path/("Q-%s.joblib" % self.Q.t_))
         self.dump_crawl_graph(path/"graph.pickle")
+        self.dump_queue(path/("queue-%s.csv" % self.Q.t_))
 
     @log_time
     def dump_crawl_graph(self, path) -> None:
@@ -482,6 +483,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         }
         joblib.dump(data, str(path), compress=3)
         self._save_params_json()
+
+    @log_time
+    def dump_queue(self, path: Path) -> None:
+        with path.open('w', encoding='utf8') as f:
+            self.scheduler.queue.debug_dump(f)
 
     @classmethod
     def _steps_before_rescheduling(cls, n_requests: int,

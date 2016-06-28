@@ -269,6 +269,18 @@ class BalancedPriorityQueue:
         queue = self.queues.pop(slot, None) or []
         return len(queue)
 
+    def debug_dump(self, fp: TextIO) -> None:
+        """ Dump debug information about this queue to a .csv file """
+        writer = csv.DictWriter(fp, ["priority", "slot", "url"])
+        writer.writeheader()
+        for slot, queue in self.queues.items():
+            for req in queue.iter_requests():
+                writer.writerow({
+                    'url': req.url,
+                    'priority': req.priority,
+                    'slot': slot,
+                })
+
     def __len__(self) -> int:
         return sum(len(q) for q in self.queues.values())
 
