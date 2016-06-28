@@ -28,6 +28,8 @@ class LinkClassifier:
         """
         sel = parsel.Selector(html)
         links = list(extract_link_dicts(sel, url))
+        if not links:
+            return []
         for link in links:
             link['domain_from'] = get_domain(url)
             link['domain_to'] = get_domain(link['url'])
