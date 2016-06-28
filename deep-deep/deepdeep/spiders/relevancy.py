@@ -108,7 +108,7 @@ def keyword_relevancy(response_html: str,
     tokens = tokenize(text)
     tokens = set(token_ngrams(tokens, 1, max_ngram))
 
-    def _score(keywords):
+    def _score(keywords: List[str]) -> float:
         s = sum(int(k in tokens) for k in keywords)
         return _scale_relevancy(s, keywords)
 
@@ -130,7 +130,7 @@ def _max_ngram_length(keywords: List[str]) -> int:
     return max(len(keyword.split()) for keyword in keywords)
 
 
-def _scale_relevancy(score, keywords):
+def _scale_relevancy(score: float, keywords: List) -> float:
     """ Weird log scale to use for keyword occurance count """
     return math.log(score + 1, len(keywords) / 2 + 2)
 

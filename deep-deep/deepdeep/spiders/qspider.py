@@ -447,19 +447,19 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         domains_closed = len(self.scheduler.queue.closed_slots)
         return domains_open, domains_closed
 
-    def get_params(self):
+    def get_params(self) -> Dict:
         keys = self._ARGS - {'checkpoint_path', 'checkpoint_interval'}
         params = {key: getattr(self, key) for key in keys}
         if getattr(self, 'crawler', None):
             params['DEPTH_PRIORITY'] = self.crawler.settings.get('DEPTH_PRIORITY')
         return params
 
-    def maybe_checkpoint(self):
+    def maybe_checkpoint(self) -> None:
         if (self.Q.t_ % self.checkpoint_interval) != 0 or self.Q.t_ == 0:
             return
         self.do_checkpoint()
 
-    def do_checkpoint(self):
+    def do_checkpoint(self) -> None:
         if not self.checkpoint_path:
             return
         path = Path(self.checkpoint_path)
@@ -467,12 +467,12 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.dump_crawl_graph(path/"graph.pickle")
 
     @log_time
-    def dump_crawl_graph(self, path):
+    def dump_crawl_graph(self, path) -> None:
         if hasattr(self, 'G'):
             nx.write_gpickle(self.G, str(path))
 
     @log_time
-    def dump_policy(self, path):
+    def dump_policy(self, path) -> None:
         """ Save the current policy """
         data = {
             'Q': self.Q,
@@ -484,10 +484,10 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self._save_params_json()
 
     @classmethod
-    def _steps_before_rescheduling(cls, n_requests,
-                                   scheduling_rps=30000,
-                                   budget=0.33,
-                                   page_process_time_s=0.1):
+    def _steps_before_rescheduling(cls, n_requests: int,
+                                   scheduling_rps: float=30000,
+                                   budget: float=0.33,
+                                   page_process_time_s: float=0.1) -> int:
         """
         How many steps to wait before re-scheduling if there are ``n_requests``
         in a queue, priorities can be updated at ``scheduling_rps`` speed,
