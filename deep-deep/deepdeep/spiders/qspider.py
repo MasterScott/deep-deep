@@ -128,7 +128,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         )
         self.page_vectorizer = PageVectorizer()
         self.total_reward = 0
-        self.model_changes = 0
+        self.steps_before_reschedule = 0
         self.goal = self.get_goal()
 
         self.checkpoint_interval = int(self.checkpoint_interval)
@@ -159,6 +159,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     def parse(self, response: Response):
         self.increase_response_count()
         self.close_finished_queues()
+        if not self.is_seed(response):
+            self.steps_before_reschedule -= 1
         self._debug_expected_vs_got(response)
         output, reward = self._parse(response)
         self.log_stats()
@@ -267,9 +269,12 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         return self.crawler.engine.slot.scheduler
 
     def on_model_changed(self):
-        self.model_changes += 1
-        if (self.model_changes % 1) == 0:
-            self.recalculate_request_priorities()
+        # TODO: this should pause engine first, in order
+        # for download timeouts to work correctly
+        if self.steps_before_reschedule <= 0:
+            num_updated = self.recalculate_request_priorities()
+            self.steps_before_reschedule = self._steps_before_rescheduling(num_updated)
+        print("{} steps left before next re-scheduling".format(self.steps_before_reschedule))
 
     def close_finished_queues(self):
         for slot in self.scheduler.queue.get_active_slots():
@@ -277,9 +282,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 self.scheduler.close_slot(slot)
 
     @log_time
-    def recalculate_request_priorities(self):
+    def recalculate_request_priorities(self) -> int:
         if self.baseline:
-            return
+            return 0
 
         scores_new = []
         scores_old = []
@@ -364,6 +369,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
         # TODO: ranking metric other than NDSG
         # It shouldn't matter that much if a request is 1st or 10th in a queue
+        return scores_new_all.size  # num updated requests
 
     def _log_promising_link(self, link, score):
         self.logger.debug("PROMISING LINK {:0.4f}: {}\n        {}".format(
@@ -467,3 +473,17 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         }
         joblib.dump(data, str(path), compress=3)
         self._save_params_json()
+
+    @classmethod
+    def _steps_before_rescheduling(cls, n_requests,
+                                   scheduling_rps=30000,
+                                   budget=0.33,
+                                   page_process_time_s=0.1):
+        """
+        How many steps to wait before re-scheduling if there are ``n_requests``
+        in a queue, priorities can be updated at ``scheduling_rps`` speed,
+        page processing time is ``page_processing_time``, and spider should
+        spend about ``budget*100`` percent of time updating request priorities?
+        """
+        ratio = budget / (1-budget)
+        return int(n_requests / scheduling_rps / ratio / page_process_time_s)
