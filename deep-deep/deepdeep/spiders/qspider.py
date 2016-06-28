@@ -5,6 +5,7 @@ from typing import Dict, Tuple, Union, Optional, List, Iterator
 
 import abc
 import joblib
+import time
 import tqdm
 import numpy as np
 import scipy.sparse as sp
@@ -167,6 +168,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.maybe_checkpoint()
 
         stats = self.get_stats_item()
+        stats['ts'] = time.time()
         stats['is_seed'] = self.is_seed(response)
         stats['reward'] = reward
         stats['url'] = response.url
