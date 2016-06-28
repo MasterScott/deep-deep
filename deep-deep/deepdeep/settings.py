@@ -32,13 +32,13 @@ RETRY_ENABLED = False
 AJAXCRAWL_ENABLED = True
 DOWNLOAD_WARNSIZE = 1*1024*1024
 DOWNLOAD_MAXSIZE = 1*1024*1024
-DOWNLOAD_TIMEOUT = 20
+DOWNLOAD_TIMEOUT = 60
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See http://doc.scrapy.org/en/latest/topics/autothrottle.html
 AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_START_DELAY = 0.5
-AUTOTHROTTLE_MAX_DELAY = 10
+AUTOTHROTTLE_MAX_DELAY = 5
 AUTOTHROTTLE_TARGET_CONCURRENCY = 2.0
 
 # Disable cookies for broad crawl (enabled by default)
