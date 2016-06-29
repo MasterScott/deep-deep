@@ -13,7 +13,7 @@ def test_request_priority_queue():
     q.push(scrapy.Request('http://example.com/2', priority=2))
     q.push(scrapy.Request('http://example.com/0', priority=0))
 
-    assert q.get_priority(q.entries[0]) == 2
+    assert -q.entries[0][0] == 2
     assert len(q) == 5
 
     assert q.pop().url == "http://example.com/2"

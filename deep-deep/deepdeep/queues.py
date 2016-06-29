@@ -155,18 +155,13 @@ class RequestsPriorityQueue(Sized):
         """ Return maximum request priority in this queue """
         if not self.entries:
             return self.EMPTY_PRIORITY
-        top_priority = self.get_priority(self.entries[0])
-        return top_priority
+        return -self.entries[0][0]
 
     @property
     def next_request(self) -> Optional[scrapy.Request]:
         if not self.entries:
             return None
         return self.entries[0][2]
-
-    @classmethod
-    def get_priority(cls, entry) -> int:
-        return -entry[0]
 
     def heapify(self) -> None:
         heapq.heapify(self.entries)
@@ -242,7 +237,7 @@ class BalancedPriorityQueue:
         if random_policy:
             queue = self.queues[random.choice(keys)]
         else:
-            weights = [self.queues[key].max_priority() for key in keys]
+            weights = [q.max_priority() for q in self.queues.values()]
             temperature = FLOAT_PRIORITY_MULTIPLIER * self.balancing_temperature
             p = softmax(weights, t=temperature)
             queue = self.queues[np.random.choice(keys, p=p)]
