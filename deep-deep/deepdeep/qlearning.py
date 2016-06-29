@@ -150,7 +150,9 @@ class QLearner:
         after unpickling; it can save a huge amount of memory.
     dummy: bool
         When True, don't learn anything. Default is False.
-
+    er_maxsize: int, optional
+        Max size of experience replay memory. None (default) means there
+        is no limit.
     """
     def __init__(self, *,
                  double_learning: bool = True,
@@ -161,7 +163,8 @@ class QLearner:
                  fit_interval: int = 1,
                  on_model_changed: Optional[Callable[[], None]]=None,
                  pickle_memory: bool = True,
-                 dummy: bool = False
+                 dummy: bool = False,
+                 er_maxsize: Optional[int] = None
                  ) -> None:
         assert 0 <= gamma < 1
         self.double_learning = double_learning
@@ -185,7 +188,7 @@ class QLearner:
         )
 
         self.clf_target = sklearn.base.clone(self.clf_online)  # type: SGDRegressor
-        self.memory = ExperienceMemory()
+        self.memory = ExperienceMemory(maxsize=er_maxsize)
         self.t_ = 0
 
     @classmethod
@@ -367,14 +370,39 @@ class QLearner:
 class ExperienceMemory:
     """
     Experience replay memory.
-    Currently it just keeps all examples in an unbound in-memory array.
+
+    Parameters
+    ----------
+    maxsize : int, optional
+        When maxsize is passed, replay memory size is limited.
+        When memory size is over limit a new observation replaces
+        a random observation from the memory. By default there is no
+        limit.
+
+        Random replaces mean that experience replay memory contains
+        both old and new examples, and that over time average age of
+        observations stored in memory converges to ``maxsize``.
+
+        Ring buffer would have been more aggressive pruning old observations;
+        average age would have been ``maxsize/2`` with a ring buffer.
     """
-    def __init__(self):
-        self.data = []  # TODO: more efficient storage
+    def __init__(self, maxsize: Optional[int]=None) -> None:
+        self.data = []
+        self.maxsize = maxsize
 
     def add(self, as_t, AS_t1, r_t1) -> None:
-        """ Add an example to the replay memory """
-        self.data.append((as_t, AS_t1, r_t1))
+        """
+        Add an example to the replay memory.
+
+        If memory is full and maxsize is enabled, a random example from
+        memory is replaced with a passed example.
+        """
+        item = (as_t, AS_t1, r_t1)
+        if self.maxsize is None or len(self.data) < self.maxsize:
+            self.data.append(item)
+        else:
+            idx = random.randint(0, len(self.data)-1)
+            self.data[idx] = item
 
     def sample(self, k: int) -> List[Tuple[Any, Any, Any]]:
         """

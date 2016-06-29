@@ -46,7 +46,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     _ARGS = {
         'double', 'use_urls', 'use_full_urls', 'use_pages', 'use_same_domain',
         'eps', 'balancing_temperature', 'gamma',
-        'replay_sample_size', 'steps_before_switch',
+        'replay_sample_size', 'replay_maxsize', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
         'baseline',
     }
@@ -87,6 +87,12 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     # how many examples to fetch from experience replay on each iteration
     replay_sample_size = 300
 
+    # Max size of experience replay memory.
+    # When all features are enabled (use_pages, use_full_urls)
+    # a single observation uses about 1MB memory on average, so
+    # replay_maxsize=10000 roughly means 10GB experience replay memory limit.
+    replay_maxsize = None
+
     # current model is saved every checkpoint_interval timesteps
     checkpoint_interval = 1000
 
@@ -115,6 +121,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
+        self.replay_maxsize = None if self.replay_maxsize is None else int(self.replay_maxsize)
         self.baseline = bool(int(self.baseline))
         self.Q = QLearner(
             steps_before_switch=self.steps_before_switch,
@@ -124,6 +131,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             on_model_changed=self.on_model_changed,
             pickle_memory=False,
             dummy=self.baseline,
+            er_maxsize=self.replay_maxsize,
         )
         self.link_vectorizer = LinkVectorizer(
             use_url=bool(self.use_urls),
