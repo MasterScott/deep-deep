@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import io
+import random
 import logging
 from typing import Optional
 
@@ -74,6 +75,7 @@ class BaseSpider(scrapy.Spider):
 
     def _parse_seeds(self, response):
         urls = list(self._get_urls(io.StringIO(response.text)))
+        random.shuffle(urls)
         for url in urls:
             yield scrapy.Request(url, self.parse, priority=self.initial_priority)
 
