@@ -3,10 +3,11 @@ import json
 from pathlib import Path
 from typing import Dict, Tuple, Union, Optional, List, Iterator
 import abc
-import joblib
 import time
 
+import psutil
 import tqdm
+import joblib
 import numpy as np
 import scipy.sparse as sp
 import networkx as nx
@@ -185,6 +186,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         stats = self.get_stats_item()
         stats['ts'] = time.time()
         stats['is_seed'] = self.is_seed(response)
+        stats['rss'] = psutil.Process().memory_info().rss
         stats['reward'] = reward
         stats['url'] = response.url
         stats['Q'] = priority_to_score(response.request.priority)

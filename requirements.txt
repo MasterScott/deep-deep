@@ -3,3 +3,4 @@ networkx==1.11
 scikit-learn==0.17.1
 joblib
 formasaurus
+psutil

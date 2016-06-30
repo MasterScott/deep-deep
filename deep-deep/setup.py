@@ -26,6 +26,7 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     install_requires=[
+        'psutil',
         'scrapy >= 1.1',
         'scikit-learn >= 0.17.1',
         'joblib',
