@@ -90,8 +90,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     # Max size of experience replay memory.
     # When all features are enabled (use_pages, use_full_urls)
     # a single observation uses about 1MB memory on average, so
-    # replay_maxsize=10000 roughly means 10GB experience replay memory limit.
-    replay_maxsize = None
+    # replay_maxsize=10000 *roughly* means 10GB experience replay memory limit.
+    replay_maxsize = 10000
 
     # current model is saved every checkpoint_interval timesteps
     checkpoint_interval = 1000
@@ -121,7 +121,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
-        self.replay_maxsize = None if self.replay_maxsize is None else int(self.replay_maxsize)
+        self.replay_maxsize = int(self.replay_maxsize)
         self.baseline = bool(int(self.baseline))
         self.Q = QLearner(
             steps_before_switch=self.steps_before_switch,
