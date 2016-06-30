@@ -473,7 +473,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         if not self.checkpoint_path:
             return
         path = Path(self.checkpoint_path)
-        self.dump_policy(path/("Q-%s.joblib" % self.Q.t_))
+        self.dump_policy(path/("Q-%s.joblib" % self.Q.t_), False)
+        # self.dump_policy(path/("Q-latest.joblib"), True)
         self.dump_crawl_graph(path/"graph.pickle")
         self.dump_queue(path/("queue-%s.csv" % self.Q.t_))
 
@@ -483,7 +484,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             nx.write_gpickle(self.G, str(path))
 
     @log_time
-    def dump_policy(self, path) -> None:
+    def dump_policy(self, path: Path, save_experience_replay: bool) -> None:
         """ Save the current policy """
         data = {
             'Q': self.Q,
@@ -491,7 +492,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             'page_vectorizer': self.page_vectorizer,
             '_params': self.get_params(),
         }
-        joblib.dump(data, str(path), compress=3)
+        self.Q.pickle_memory = save_experience_replay
+        try:
+            joblib.dump(data, str(path), compress=3)
+        finally:
+            self.Q.pickle_memory = False
         self._save_params_json()
 
     @log_time
