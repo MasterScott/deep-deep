@@ -9,8 +9,7 @@ setup(
     # long_description=open('README.rst').read(),
     author='Mikhail Korobov',
     license='MIT',
-    packages=find_packages('deep-deep'),
-    package_dir={'': 'deep-deep'},
+    packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
     classifiers=[
