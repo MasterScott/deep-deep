@@ -59,7 +59,7 @@ SCHEDULER = 'deepdeep.scheduler.Scheduler'
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
 import sys
 
-HTTPCACHE_ENABLED = True
+HTTPCACHE_ENABLED = False
 HTTPCACHE_EXPIRATION_SECS = 60*60*24*30  # 30 days
 HTTPCACHE_DIR = 'httpcache-%s' % sys.version_info[0]
 #HTTPCACHE_IGNORE_HTTP_CODES = []
