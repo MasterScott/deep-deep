@@ -15,6 +15,7 @@ from formasaurus.utils import get_domain
 import scrapy
 from scrapy.http import TextResponse, Response
 from scrapy.statscollectors import StatsCollector
+from scrapy_cdr.utils import text_cdr_item
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
@@ -49,7 +50,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         'eps', 'balancing_temperature', 'gamma',
         'replay_sample_size', 'replay_maxsize', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
-        'baseline',
+        'baseline', 'export_cdr',
     }
     ALLOWED_ARGUMENTS = _ARGS | BaseSpider.ALLOWED_ARGUMENTS
     custom_settings = {
@@ -57,6 +58,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         'DEPTH_PRIORITY': 1,
     }
     initial_priority = score_to_priority(5)
+
+    # whether to export page data as CDR items
+    export_cdr = 0
 
     # whether to use URL path/query or a full URL as a feature
     use_urls = 0
@@ -111,6 +115,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
+        self.export_cdr = int(self.export_cdr)
         self.eps = float(self.eps)
         self.balancing_temperature = float(self.balancing_temperature)
         self.gamma = float(self.gamma)
@@ -191,7 +196,20 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         stats['url'] = response.url
         stats['Q'] = priority_to_score(response.request.priority)
         stats['eps-policy'] = response.request.meta.get('from_random_policy', None)
-        yield stats
+
+        if self.export_cdr:
+            cdr_item = text_cdr_item(
+                response,
+                crawler_name='deep-deep',
+                team_name='HG',
+                metadata={
+                    'depth': response.meta.get('depth'),
+                    'stats': stats
+                }
+            )
+            yield cdr_item
+        else:
+            yield stats
 
         yield from output
 

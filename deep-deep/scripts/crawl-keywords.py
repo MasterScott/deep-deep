@@ -18,16 +18,16 @@ def crawl():
     res_dir.mkdir(exist_ok=True)
 
     log_path = res_dir.joinpath("spider.log")
-    stats_path = res_dir.joinpath("stats.jl")
+    items_path = res_dir.joinpath("items.jl")
     args = [
         "scrapy", "crawl", "relevant",
         "-a", "seeds_url=%s" % in_file.absolute(),
         "-a", "checkpoint_path=%s" % res_dir.absolute(),
         "-a", "keywords_file=%s" % keywords_file.absolute(),
-        "-o", str(stats_path),
-        # "--logfile", str(log_path),
-        # "-L", "INFO",
-        "-s", "CLOSESPIDER_ITEMCOUNT=10000",
+        "-o", "gzip:" + str(items_path.absolute()),
+        "--logfile", str(log_path.absolute()),
+        "-L", "INFO",
+        "-s", "CLOSESPIDER_ITEMCOUNT=1000000",
     ] + sys.argv[4:]
 
     res_dir.joinpath("meta.json").write_text(json.dumps({

@@ -6,3 +6,4 @@ formasaurus
 psutil
 numpy
 formasaurus[with_deps]
+scrapy-cdr
