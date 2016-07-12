@@ -96,7 +96,10 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     # When all features are enabled (use_pages, use_full_urls)
     # a single observation uses about 1MB memory on average, so
     # replay_maxsize=10000 *roughly* means 10GB experience replay memory limit.
-    replay_maxsize = 10000
+    #
+    # With use_full_url=1 and use_pages=0 a single observation uses
+    # about 10Kb on average.
+    replay_maxsize = 100000
 
     # current model is saved every checkpoint_interval timesteps
     checkpoint_interval = 1000

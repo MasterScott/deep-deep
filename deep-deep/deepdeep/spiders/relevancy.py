@@ -38,6 +38,7 @@ class RelevancySpider(QSpider):
     max_requests_per_domain = None  # type: Optional[int]
     max_relevant_pages_per_domain = None  # type: Optional[int]
     replay_sample_size = 50
+    replay_maxsize = 10000  # increase it if use_pages is 0
 
     # a file with keywords
     keywords_file = None   # type: str

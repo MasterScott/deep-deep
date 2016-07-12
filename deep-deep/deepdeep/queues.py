@@ -27,7 +27,6 @@ from typing import (
 )
 
 import numpy as np
-# from twisted.internet.task import LoopingCall
 import scrapy
 from deepdeep.utils import softmax
 
@@ -85,7 +84,6 @@ class RequestsPriorityQueue(Sized):
             priority, count, request = heapq.heappop(self.entries)
             if request is not self.REMOVED:
                 return request
-        # raise KeyError('pop from an empty priority queue')
 
     @classmethod
     def change_priority(cls,
