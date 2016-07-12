@@ -380,16 +380,16 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             ndcg_score(scores_new_all, scores_old_all, k=100)
         ))
 
-        # fixme: something is wrong with this micro-averaging,
+        # FIXME: something is wrong with this micro-averaging,
         # sometimes it returns values > 1
-        domain_ndcg = np.array([
-            ndcg_score(new, old, k=10)
-            for new, old in zip(scores_new, scores_old)
-        ])
-        mean_domain_ndcg = domain_ndcg[~np.isnan(domain_ndcg)].mean()
-        print("Top-10 micro-averaged in-domain request ranking: NDCG={:0.4f}".format(
-            mean_domain_ndcg
-        ))
+        # domain_ndcg = np.array([
+        #     ndcg_score(new, old, k=10)
+        #     for new, old in zip(scores_new, scores_old)
+        # ])
+        # mean_domain_ndcg = domain_ndcg[~np.isnan(domain_ndcg)].mean()
+        # print("Top-10 micro-averaged in-domain request ranking: NDCG={:0.4f}".format(
+        #     mean_domain_ndcg
+        # ))
 
         diff = scores_new_all - scores_old_all
         rmse = np.sqrt((diff ** 2).sum() / diff.size)
