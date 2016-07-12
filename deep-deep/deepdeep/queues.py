@@ -203,17 +203,24 @@ class BalancedPriorityQueue:
     queue with a highest request priority will be selected with a probability
     close to 1. Default value is 1.0; it means queues are selected randomly
     with probabilities proportional to max priority of their requests.
+
+    Requests are fetched in batches of ``batch_size``. If set to None
+    (default), a heuristic algorithm is used to choose the batch size.
     """
     def __init__(self,
                  queue_factory: Callable[[str], RequestsPriorityQueue],
                  eps: float=0.0,
-                 balancing_temperature: float=1.0) -> None:
+                 balancing_temperature: float=1.0,
+                 batch_size: Optional[int]=None,
+                 ) -> None:
         assert balancing_temperature > 0
         self.queues = {}  # type: Dict[str, RequestsPriorityQueue]
         self.closed_slots = set()  # type: Set[str]
         self.eps = eps
         self.queue_factory = queue_factory
         self.balancing_temperature = balancing_temperature
+        self._batch_size = batch_size
+        self._buffer = []  # type: List[scrapy.Request]
 
     def push(self, request: scrapy.Request) -> None:
         slot = request.meta.get('scheduler_slot')
@@ -224,26 +231,48 @@ class BalancedPriorityQueue:
         self.queues[slot].push(request)
 
     def pop(self) -> Optional[scrapy.Request]:
-        keys = list(self.queues.keys())
-        if not keys:
-            return
+        if not self._buffer:
+            self._buffer.extend(self._pop_many(self.batch_size))
 
-        random_policy = random.random() < (self.eps or 0.0)
-        # if random_policy:
-        #     print("ε", end=' ')
+        if self._buffer:
+            return self._buffer.pop()
 
-        if random_policy:
-            queue = self.queues[random.choice(keys)]
-        else:
-            weights = [q.max_priority() for q in self.queues.values()]
-            temperature = FLOAT_PRIORITY_MULTIPLIER * self.balancing_temperature
-            p = softmax(weights, t=temperature)
-            queue = self.queues[np.random.choice(keys, p=p)]
-        # print(queue, dict(zip(domains, p)))
-        request = queue.pop_random() if random_policy else queue.pop()
-        if request is not None:
-            request.meta['from_random_policy'] = random_policy
-        return request
+    @property
+    def batch_size(self) -> int:
+        if self._batch_size is not None:
+            return self._batch_size
+        # With small number of domains in a queue batching is not needed
+        # and hurts sampling quality. With a large number of domains it is
+        # crucial for fast sampling, and negative effects are much less
+        # profound.
+        return min(1000, max(1, len(self.queues) // 1000))
+
+    def _pop_many(self, n: int) -> List[scrapy.Request]:
+        all_slots = list(self.queues.keys())
+        if not all_slots:
+            return []
+
+        weights = [q.max_priority() for q in self.queues.values()]
+        temperature = FLOAT_PRIORITY_MULTIPLIER * self.balancing_temperature
+        p = softmax(weights, t=temperature)
+        chosen_slots = np.random.choice(all_slots, size=n, replace=True, p=p)
+
+        queues = [self.queues[slot] for slot in chosen_slots]
+        is_random = [False] * len(queues)
+
+        for idx in range(len(queues)):
+            random_policy = random.random() < (self.eps or 0.0)
+            if random_policy:
+                is_random[idx] = True
+                queues[idx] = self.queues[random.choice(all_slots)]
+
+        requests = []
+        for random_policy, queue in zip(is_random, queues):
+            request = queue.pop_random() if random_policy else queue.pop()
+            if request is not None:
+                request.meta['from_random_policy'] = random_policy
+                requests.append(request)
+        return requests
 
     def get_active_slots(self) -> List[str]:
         return [key for key, queue in self.queues.items() if len(queue)]
@@ -266,6 +295,12 @@ class BalancedPriorityQueue:
         """ Dump debug information about this queue to a .csv file """
         writer = csv.DictWriter(fp, ["priority", "slot", "url"])
         writer.writeheader()
+        for req in self._buffer:
+            writer.writerow({
+                'url': req.url,
+                'priority': req.priority,
+                'slot': '<BUFFER>',
+            })
         for slot, queue in self.queues.items():
             for req in queue.iter_requests():
                 writer.writerow({
@@ -275,5 +310,5 @@ class BalancedPriorityQueue:
                 })
 
     def __len__(self) -> int:
-        return sum(len(q) for q in self.queues.values())
+        return sum(len(q) for q in self.queues.values()) + len(self._buffer)
 
