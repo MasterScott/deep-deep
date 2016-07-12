@@ -387,7 +387,7 @@ class ExperienceMemory:
         average age would have been ``maxsize/2`` with a ring buffer.
     """
     def __init__(self, maxsize: Optional[int]=None) -> None:
-        self.data = []
+        self.data = []  # type: List[Tuple[Any, Any, Any]]
         self.maxsize = maxsize
 
     def add(self, as_t, AS_t1, r_t1) -> None:
