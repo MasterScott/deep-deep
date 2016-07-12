@@ -397,6 +397,8 @@ class ExperienceMemory:
         If memory is full and maxsize is enabled, a random example from
         memory is replaced with a passed example.
         """
+        # TODO: In AS matrix rows of S columns usually contains the same data;
+        # delta-compress them?
         item = (as_t, AS_t1, r_t1)
         if self.maxsize is None or len(self.data) < self.maxsize:
             self.data.append(item)
