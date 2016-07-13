@@ -28,7 +28,7 @@ from typing import (
 
 import numpy as np
 import scrapy
-from deepdeep.utils import softmax
+from deepdeep.utils import softmax, log_time
 
 
 FLOAT_PRIORITY_MULTIPLIER = 10000
@@ -253,6 +253,7 @@ class BalancedPriorityQueue:
         # profound.
         return min(1000, max(1, len(self.queues) // 1000))
 
+    @log_time
     def _pop_many(self, n: int) -> List[scrapy.Request]:
         all_slots = list(self.queues.keys())
         if not all_slots:

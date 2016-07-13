@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from scrapy.utils.misc import load_object
 from deepdeep.queues import RequestsPriorityQueue, QueueClosed
-from deepdeep.utils import log_time
 
 
 class Scheduler:
@@ -54,7 +53,6 @@ class Scheduler:
             self.stats.inc_value('custom-scheduler/dropped/', spider=self.spider)
         return True
 
-    @log_time
     def next_request(self):
         request = self.queue.pop()
         if request:
