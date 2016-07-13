@@ -34,8 +34,9 @@ DOWNLOAD_WARNSIZE = 1*1024*1024
 DOWNLOAD_MAXSIZE = 1*1024*1024
 DOWNLOAD_TIMEOUT = 60
 
-# use very large priority adjust values to make sure redirects are processed
-REDIRECT_PRIORITY_ADJUST = 100*10000
+# Use very large priority adjust values to make sure redirects are processed
+# This doesn't work with batched request sampling!
+# REDIRECT_PRIORITY_ADJUST = 100*10000
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See http://doc.scrapy.org/en/latest/topics/autothrottle.html

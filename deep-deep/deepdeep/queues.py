@@ -83,6 +83,7 @@ class RequestsPriorityQueue(Sized):
         while self.entries:
             priority, count, request = heapq.heappop(self.entries)
             if request is not self.REMOVED:
+                self._pop_empty()
                 return request
 
     @classmethod
@@ -147,6 +148,7 @@ class RequestsPriorityQueue(Sized):
             entry = random.choice(self.entries)
             if entry[2] is not self.REMOVED:
                 request = self.remove_entry(entry)
+                self._pop_empty()
                 return request
 
     def max_priority(self) -> int:
@@ -204,8 +206,12 @@ class BalancedPriorityQueue:
     close to 1. Default value is 1.0; it means queues are selected randomly
     with probabilities proportional to max priority of their requests.
 
-    Requests are fetched in batches of ``batch_size``. If set to None
-    (default), a heuristic algorithm is used to choose the batch size.
+    Requests are fetched in batches; ``batch_size`` is a parameter
+    which suggests a number of non-random requests in a batch.
+    Average size of actual batch is ``batch_size*(1+eps)``.
+    When ``batch_size`` is set to None (default), a heuristic algorithm
+    is used to choose the batch size - the greater is a number of queues
+    being balanced, the larger is a batch size.
     """
     def __init__(self,
                  queue_factory: Callable[[str], RequestsPriorityQueue],
@@ -257,21 +263,41 @@ class BalancedPriorityQueue:
         p = softmax(weights, t=temperature)
         chosen_slots = np.random.choice(all_slots, size=n, replace=True, p=p)
 
-        queues = [self.queues[slot] for slot in chosen_slots]
-        is_random = [False] * len(queues)
+        # It is not possible to get a required amount of requests
+        # from some domain queues - high-priority domain can be chosen too many
+        # times. This changes a % of random requests in fixed-size batches:
+        # there can be a much larger % of random requests because of these
+        # unsuccessful attempts to get non-random requests.
+        #
+        # So instead of using a fixed batch size and making some requests
+        # in it random, we're *adding* some amount of random requests
+        # to the batch. The amount of random requests is chosen to make
+        # average ratio of random requests equal to ``eps``.
 
-        for idx in range(len(queues)):
-            random_policy = random.random() < (self.eps or 0.0)
-            if random_policy:
-                is_random[idx] = True
-                queues[idx] = self.queues[random.choice(all_slots)]
+        queues = np.asarray([self.queues[slot] for slot in chosen_slots])
+        requests = [r for r in [q.pop() for q in queues] if r]
 
-        requests = []
-        for random_policy, queue in zip(is_random, queues):
-            request = queue.pop_random() if random_policy else queue.pop()
+        # XXX: n_random is not 100% correct because there can be not enough
+        # requests to pop from random queues as well. But it doesn't look
+        # like a problem in practice (?); it makes effective ``eps`` slightly
+        # smaller.
+        n_random = np.random.binomial(
+            n=len(requests) * (1 + self.eps),
+            p=self.eps
+        )
+        random_queues = [
+            self.queues[slot]
+            for slot in np.random.choice(all_slots, size=n_random)
+        ]
+        for queue in random_queues:
+            request = queue.pop_random()
             if request is not None:
-                request.meta['from_random_policy'] = random_policy
+                request.meta['from_random_policy'] = True
                 requests.append(request)
+
+        random.shuffle(requests)
+        # print("======= Unique domains selected: %s" % len(set(chosen_slots)))
+        # print("======= Random requests: %d/%d" % (n_random, len(requests)))
         return requests
 
     def get_active_slots(self) -> List[str]:
@@ -311,4 +337,3 @@ class BalancedPriorityQueue:
 
     def __len__(self) -> int:
         return sum(len(q) for q in self.queues.values()) + len(self._buffer)
-
