@@ -64,8 +64,8 @@ class RequestsPriorityQueue(Sized):
 
     REMOVED = object()
 
-    REMOVED_PRIORITY = score_to_priority(10000)
-    EMPTY_PRIORITY = score_to_priority(-10000)
+    REMOVED_PRIORITY = score_to_priority(15000)
+    EMPTY_PRIORITY = score_to_priority(-15000)
 
     def __init__(self, fifo: bool=True) -> None:
         # entries are lists of [int, int, scrapy.Request]
