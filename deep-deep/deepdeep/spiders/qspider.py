@@ -60,7 +60,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     initial_priority = score_to_priority(5)
 
     # whether to export page data as CDR items
-    export_cdr = 0
+    export_cdr = 1
 
     # whether to use URL path/query or a full URL as a feature
     use_urls = 0
