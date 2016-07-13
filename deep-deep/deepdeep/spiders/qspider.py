@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, Tuple, Union, Optional, List, Iterator
 import abc
 import time
+import gzip
 
 import psutil
 import tqdm
@@ -497,7 +498,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.dump_policy(path/("Q-%s.joblib" % self.Q.t_), False)
         # self.dump_policy(path/("Q-latest.joblib"), True)
         self.dump_crawl_graph(path/"graph.pickle")
-        self.dump_queue(path/("queue-%s.csv" % self.Q.t_))
+        self.dump_queue(path/("queue-%s.csv.gz" % self.Q.t_))
 
     @log_time
     def dump_crawl_graph(self, path) -> None:
@@ -522,7 +523,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     @log_time
     def dump_queue(self, path: Path) -> None:
-        with path.open('w', encoding='utf8') as f:
+        with gzip.open(str(path), 'wt', encoding='utf8') as f:
             self.scheduler.queue.debug_dump(f)
 
     @classmethod
