@@ -47,7 +47,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     """
     _ARGS = {
-        'double', 'use_urls', 'use_full_urls', 'use_pages', 'use_same_domain',
+        'double', 'use_urls', 'use_full_urls', 'use_same_domain',
+        'use_pages', 'page_vectorizer_path',
         'eps', 'balancing_temperature', 'gamma',
         'replay_sample_size', 'replay_maxsize', 'steps_before_switch',
         'checkpoint_path', 'checkpoint_interval',
@@ -72,6 +73,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     # whether to use page content as a feature
     use_pages = 0
+
+    # path to a saved page vectorizer model
+    page_vectorizer_path = None  # type: str
 
     # use Double Learning
     double = 1
@@ -125,7 +129,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.gamma = float(self.gamma)
         self.use_urls = bool(int(self.use_urls))
         self.use_full_urls = bool(int(self.use_full_urls))
-        self.use_pages = int(self.use_pages)
         self.use_same_domain = int(self.use_same_domain)
         self.double = int(self.double)
         self.stay_in_domain = bool(int(self.stay_in_domain))
@@ -148,7 +151,14 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             use_full_url=bool(self.use_full_urls),
             use_same_domain=bool(self.use_same_domain),
         )
-        self.page_vectorizer = PageVectorizer()
+        if self.page_vectorizer_path:
+            self.use_pages = True
+            self.page_vectorizer = joblib.load(self.page_vectorizer_path)
+            self.page_vectorizer.steps[-1][1].verbose = False
+        else:
+            self.use_pages = int(self.use_pages)
+            self.page_vectorizer = PageVectorizer()
+
         self.total_reward = 0
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()

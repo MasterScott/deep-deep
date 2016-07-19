@@ -203,7 +203,7 @@ class QLearner:
         """
         if A is not None and s is not None:
             n_rows = A.shape[0]
-            S = sparse.vstack([s] * n_rows)
+            S = sparse.vstack([sparse.coo_matrix(s)] * n_rows)
             return sparse.hstack([A, S]).tocsr()
         else:
             return A
