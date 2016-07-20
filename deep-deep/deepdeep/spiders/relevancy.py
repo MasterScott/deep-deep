@@ -29,16 +29,22 @@ class RelevancySpider(QSpider):
         'max_relevant_pages_per_domain'
     }
 
+    # overrides for default option values used in QSpider
     stay_in_domain = False
-    use_pages = 1
     balancing_temperature = 0.1
+    replay_sample_size = 50
+    replay_maxsize = 100000  # decrease it to ~10K if use_pages is 1
+
+    # Options to limit a number of requests per domains.
+    # Set a limit if the goal is to find many relevant domains
+    # and/or train Q function to use in a large crawl.
     max_requests_per_domain = None  # type: Optional[int]
     max_relevant_pages_per_domain = None  # type: Optional[int]
-    replay_sample_size = 50
-    replay_maxsize = 10000  # increase it if use_pages is 0
 
     # a file with keywords
     keywords_file = None   # type: str
+
+    # these are not spider arguments!
     pos_keywords = []      # type: List[str]
     neg_keywords = []      # type: List[str]
 
