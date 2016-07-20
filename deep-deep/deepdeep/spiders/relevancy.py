@@ -19,14 +19,12 @@ class RelevancySpider(QSpider):
     name = 'relevant'
     ALLOWED_ARGUMENTS = {
         'keywords_file',
-        'discovery_bonus',
         'max_requests_per_domain',
         'max_relevant_pages_per_domain',
     } | QSpider.ALLOWED_ARGUMENTS
     _ARGS = QSpider._ARGS | {
         'pos_keywords',
         'neg_keywords',
-        'discovery_bonus',
         'max_requests_per_domain',
         'max_relevant_pages_per_domain'
     }
@@ -34,7 +32,6 @@ class RelevancySpider(QSpider):
     stay_in_domain = False
     use_pages = 1
     balancing_temperature = 0.1
-    discovery_bonus = 0.0
     max_requests_per_domain = None  # type: Optional[int]
     max_relevant_pages_per_domain = None  # type: Optional[int]
     replay_sample_size = 50
@@ -71,14 +68,12 @@ class RelevancySpider(QSpider):
                                            max_ngram=self.max_ngram)
 
     def get_goal(self):
-        self.discovery_bonus = float(self.discovery_bonus)
         if self.max_requests_per_domain is not None:
             self.max_requests_per_domain = int(self.max_requests_per_domain)
         if self.max_relevant_pages_per_domain is not None:
             self.max_relevant_pages_per_domain = int(self.max_relevant_pages_per_domain)
         return RelevancyGoal(
             relevancy=self.relevancy,
-            discovery_bonus=self.discovery_bonus,
             max_requests_per_domain=self.max_requests_per_domain,
             max_relevant_pages_per_domain=self.max_relevant_pages_per_domain,
         )

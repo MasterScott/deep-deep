@@ -7,7 +7,7 @@ Crawl objective (goal) classes define how is reward computed.
 """
 from __future__ import absolute_import
 import abc
-from typing import Dict, Set, Callable
+from typing import Callable
 from weakref import WeakKeyDictionary
 from collections import defaultdict
 
@@ -61,17 +61,12 @@ class RelevancyGoal(BaseGoal):
     2) find relevant information on a website.
 
     In order to prioritize (1) over (2) RelevancyGoal provides
-    several options:
+    these options:
 
     a) it can stop crawling a domain after a certain
        number of pages (see ``max_requests_per_domain``);
     b) it can stop crawling a domain after a certain amount of relevant pages
        (see ``max_relevant_pages_per_domain`` and ``relevancy_threshold``);
-    c) it can add a larger bonus for the first relevant page on
-       a website; this should encourage spider to go to new domains
-       (see ``discovery_bonus`` and ``relevancy_threshold``).
-
-    Based on experiments it looks like (a) and (b) works, but (c) doesn't.
 
     The idea behind (a) and (b) limits is to stop crawling a website after
     we're sure it is relevant, to free up resources for other websites.
@@ -80,6 +75,10 @@ class RelevancyGoal(BaseGoal):
     with no relevant content, but with lots of links to other domains
     with relevant content: with (b) spider will keep crawling these hubs,
     while with (a) it won't.
+
+    A third approach was also tried: add a larger bonus for the first
+    relevant page on a website; this should encourage spider to go to
+    new domains, but it didn't work.
 
     Parameters
     ----------
@@ -95,24 +94,18 @@ class RelevancyGoal(BaseGoal):
         Maximum number of reward accumulated for a single domain, or None
         if there is no limit. Default is None.
     relevancy_threshold: float
-        Minimum relevancy required to give a discovery bonus or to increase
-        relevant pages count. See `discovery_bonus` and
-        `max_relevant_pages_per_domain`.  Default threshold is 0.1.
-    discovery_bonus: float
-        If this is a first page on this domain with
-        ``relevancy(response) >= relevancy_threshold`` then
-        `discovery_bonus` is added to the reward. Default value is 0.0.
+        Minimum relevancy required to increase
+        relevant pages count. See `max_relevant_pages_per_domain`.
+        Default threshold is 0.1.
     """
     def __init__(self,
                  relevancy: Callable[[Response], float],
                  max_requests_per_domain: int = None,
                  max_relevant_pages_per_domain: float = None,
-                 discovery_bonus: float = 0.0,
                  relevancy_threshold: float = 0.1
                  ) -> None:
         self.relevancy = relevancy
         self.relevancy_threshold = relevancy_threshold
-        self.discovery_bonus = discovery_bonus
         self.max_requests_per_domain = max_requests_per_domain
         self.max_relevant_pages_per_domain = max_relevant_pages_per_domain
 
@@ -120,12 +113,7 @@ class RelevancyGoal(BaseGoal):
         self.relevant_pages_found = defaultdict(int)  # type: defaultdict
 
     def get_reward(self, response: Response) -> float:
-        domain = get_response_domain(response)
-        score = self.relevancy(response)
-        if score >= self.relevancy_threshold:
-            if not self.relevant_pages_found[domain]:
-                score += self.discovery_bonus
-        return score
+        return self.relevancy(response)
 
     def response_observed(self, response: TextResponse) -> None:
         domain = get_response_domain(response)
