@@ -11,6 +11,12 @@ from deepdeep.qlearning import QLearner
 
 
 class LinkClassifier:
+    """
+    This class allows to use Q.joblib models saved by QSpider.
+    Load it with ``clf = LinkClassifier.load('/path/to/Q.joblib')``,
+    then call :meth:`extract_urls` to get all links on a page along
+    with their scores.
+    """
     def __init__(self, Q, link_vectorizer, page_vectorizer, **kwargs):
         self.Q = Q  # type: QLearner
         self.link_vectorizer = link_vectorizer
