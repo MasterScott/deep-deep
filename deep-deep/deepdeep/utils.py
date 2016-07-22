@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 import time
 import itertools
 import functools
@@ -6,6 +7,9 @@ import collections
 from urllib.parse import unquote_plus
 from urllib.parse import urlsplit
 
+import json
+
+import gzip
 import numpy as np
 import parsel
 import lxml.html
@@ -13,6 +17,9 @@ from lxml import etree  # type: ignore
 from lxml.html.clean import Cleaner  # type: ignore
 from formasaurus.utils import get_domain
 from scrapy.utils.url import canonicalize_url as _canonicalize_url
+
+
+logger = logging.getLogger(__name__)
 
 
 def dict_aggregate_max(*dicts):
@@ -193,3 +200,33 @@ def html2text(html: str) -> str:
 @functools.lru_cache(maxsize=100000)
 def canonicalize_url(url: str) -> str:
     return _canonicalize_url(url)
+
+
+def maybe_gzip_open(path, *args, **kwargs):
+    """
+    Open file with either open or gzip.open, depending on file extension.
+    """
+    if path.endswith(".gz"):
+        _open = gzip.open
+    else:
+        _open = open
+    return _open(path, *args, **kwargs)
+
+
+def iter_jsonlines(path):
+    """
+    Read .jl or .jl.gz file with JSON lines data,
+    return iterator with decoded lines.
+    If the .jl.gz archive is broken as much lines as possible are read from
+    the archive, and then an error is logged.
+    """
+    with maybe_gzip_open(str(path), 'rt', encoding='utf8') as f_in:
+        try:
+            for line in f_in:
+                try:
+                    yield json.loads(line)
+                except Exception as e:
+                    logging.warning("Error found: JSON line can't be decoded. %r" % e)
+                    break
+        except EOFError:
+            logging.warning("Error found: tuncated archive.")

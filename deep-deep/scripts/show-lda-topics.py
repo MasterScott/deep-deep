@@ -11,8 +11,6 @@ Options:
 
 """
 import sys
-import json
-import gzip
 from pathlib import Path
 sys.path.insert(0, str((Path(__file__).parent / "..").absolute()))
 
@@ -20,21 +18,11 @@ import joblib
 from docopt import docopt
 from tqdm import tqdm
 from sklearn.pipeline import Pipeline
-
-
-def iter_jsonlines(path):
-    with gzip.open(str(path), 'rt', encoding='utf8') as f:
-        try:
-            for line in f:
-                yield json.loads(line)
-        except Exception as e:
-            print(repr(e))
-            return
+from deepdeep.exports import iter_jsonlines
 
 
 def iter_html(path):
-    for line in iter_jsonlines(path):
-        yield line['raw_content']
+    return (line['raw_content'] for line in iter_jsonlines(path))
 
 
 def print_top_words(model, feature_names, n_top_words, word_threshold=0.11):
