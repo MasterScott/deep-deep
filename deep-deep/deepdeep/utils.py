@@ -4,18 +4,16 @@ import time
 import itertools
 import functools
 import collections
-from urllib.parse import unquote_plus
-from urllib.parse import urlsplit
-
+from urllib.parse import unquote_plus, urlsplit
 import json
-
 import gzip
+
 import numpy as np
 import parsel
 import lxml.html
+import tldextract
 from lxml import etree  # type: ignore
 from lxml.html.clean import Cleaner  # type: ignore
-from formasaurus.utils import get_domain
 from scrapy.utils.url import canonicalize_url as _canonicalize_url
 
 
@@ -36,6 +34,10 @@ def dict_aggregate_max(*dicts):
         for key, value in dct.items():
             res[key] = max(res.get(key, value), value)
     return res
+
+
+def get_domain(url: str) -> str:
+    return tldextract.extract(url).registered_domain.lower()
 
 
 def get_response_domain(response):

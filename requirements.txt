@@ -7,5 +7,6 @@ psutil
 numpy
 formasaurus[with_deps]
 scrapy-cdr
+tldextract
 stop-words
 docopt

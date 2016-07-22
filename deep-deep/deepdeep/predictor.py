@@ -4,10 +4,10 @@ from typing import List, Tuple
 
 import joblib
 import parsel
-from formasaurus.utils import get_domain
 
 from deepdeep.links import extract_link_dicts
 from deepdeep.qlearning import QLearner
+from deepdeep.utils import get_domain
 
 
 class LinkClassifier:

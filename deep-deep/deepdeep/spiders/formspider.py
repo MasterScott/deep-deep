@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from formasaurus.utils import get_domain
-
 from .qspider import QSpider
 from deepdeep.goals import FormasaurusGoal
+from deepdeep.utils import get_domain
 
 
 class FormSpider(QSpider):

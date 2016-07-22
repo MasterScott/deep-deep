@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import logging
 
-from formasaurus.utils import get_domain
 from scrapy.exceptions import IgnoreRequest
 
+from deepdeep.utils import get_domain
+
+
 logger = logging.getLogger(__name__)
-
-
 offdomain_request_dropped = object()
 
 
