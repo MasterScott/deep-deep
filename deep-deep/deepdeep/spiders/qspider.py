@@ -245,7 +245,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             self.update_node(response, {'reward': 0})
             return [], 0
 
-        page_vector = self._get_page_vector(response)
+        page_vector = self._page_vector(response) if self.use_pages else None
         links = self._extract_links(response)
         links_matrix = self.link_vectorizer.transform(links) if links else None
         links_matrix = self.Q.join_As(links_matrix, page_vector)
@@ -296,11 +296,13 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             set_request_domain(req, next_domain)
             yield req
 
-    def _get_page_vector(self, response: TextResponse) -> Optional[np.ndarray]:
+    def _page_vector(self, response: TextResponse) -> np.ndarray:
         """ Convert response content to a feature vector """
-        if not self.use_pages:
-            return None
-        return self.page_vectorizer.transform([response.text])[0]
+        if hasattr(response, '_cached_page_vector'):
+            return response._cached_page_vector
+        vec = self.page_vectorizer.transform([response.text])[0]
+        response._cached_page_vector = vec
+        return vec
 
     def get_scheduler_queue(self):
         """

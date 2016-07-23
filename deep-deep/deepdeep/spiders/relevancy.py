@@ -1,30 +1,25 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import math
+import abc
 from pathlib import Path
 from typing import List, Optional
 
-from scrapy.http import Response
-from formasaurus.text import tokenize, token_ngrams
+import joblib
+from scrapy.http import Response, TextResponse
 
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal
-from deepdeep.utils import html2text
 
 
-class RelevancySpider(QSpider):
+class _RelevancySpider(QSpider, metaclass=abc.ABCMeta):
     """
     This spider learns how to crawl relevant pages.
     """
-    name = 'relevant'
-    ALLOWED_ARGUMENTS = {
-        'keywords_file',
+    ALLOWED_ARGUMENTS = QSpider.ALLOWED_ARGUMENTS | {
         'max_requests_per_domain',
-        'max_relevant_pages_per_domain',
-    } | QSpider.ALLOWED_ARGUMENTS
+        'max_relevant_pages_per_domain'
+    }
     _ARGS = QSpider._ARGS | {
-        'pos_keywords',
-        'neg_keywords',
         'max_requests_per_domain',
         'max_relevant_pages_per_domain'
     }
@@ -34,19 +29,13 @@ class RelevancySpider(QSpider):
     balancing_temperature = 0.1
     replay_sample_size = 50
     replay_maxsize = 100000  # decrease it to ~10K if use_pages is 1
+    use_full_urls = 1
 
     # Options to limit a number of requests per domains.
     # Set a limit if the goal is to find many relevant domains
     # and/or train Q function to use in a large crawl.
     max_requests_per_domain = None  # type: Optional[int]
     max_relevant_pages_per_domain = None  # type: Optional[int]
-
-    # a file with keywords
-    keywords_file = None   # type: str
-
-    # these are not spider arguments!
-    pos_keywords = []      # type: List[str]
-    neg_keywords = []      # type: List[str]
 
     custom_settings = {
         # copied from QSpider
@@ -59,19 +48,9 @@ class RelevancySpider(QSpider):
         },
     }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        keywords = Path(self.keywords_file).read_text().splitlines()
-        self.pos_keywords = [k for k in keywords if not k.startswith('-')]
-        self.neg_keywords = [k[1:] for k in keywords if k.startswith('-')]
-        self.max_ngram = _max_ngram_length(self.pos_keywords)
-        self._save_params_json()
-
+    @abc.abstractmethod
     def relevancy(self, response: Response) -> float:
-        return keywords_response_relevancy(response,
-                                           pos_keywords=self.pos_keywords,
-                                           neg_keywords=self.neg_keywords,
-                                           max_ngram=self.max_ngram)
+        pass
 
     def get_goal(self):
         if self.max_requests_per_domain is not None:
@@ -85,54 +64,83 @@ class RelevancySpider(QSpider):
         )
 
 
-def keywords_response_relevancy(response: Response,
-                                pos_keywords: List[str],
-                                neg_keywords: List[str],
-                                max_ngram=1):
+class KeywordRelevancySpider(_RelevancySpider):
     """
-    Relevancy score based on how many keywords from a list are
-    in response text.
+    This spider learns how to crawl relevant pages.
+    What is relevant is defined by a keywords.txt file: it is
+    a file with keywords, each keyword (probably multi-word) on a single line.
+    Start line with - if keyword should be considered negative,
+    i.e. page is less relevant if keyword is present.
 
-    Score is transformed using a weird log scale (fixme)
-    to *roughly* fit [0,1] interval and to not require all keywords to be
-    present for a page to be relevant.
+    Pass a path to keywords file using keywords_file argument::
+
+        scrapy crawl relevant-keywords -a keywords_file=/path/to/keywords.txt
+
     """
-    if not hasattr(response, 'text'):
-        return 0.0
-    return keyword_relevancy(response.text, pos_keywords, neg_keywords, max_ngram)
+    name = 'relevant-keywords'
+    ALLOWED_ARGUMENTS = _RelevancySpider.ALLOWED_ARGUMENTS | {'keywords_file'}
+    _ARGS = _RelevancySpider._ARGS | {'pos_keywords', 'neg_keywords'}
+
+    # a file with keywords
+    keywords_file = None   # type: str
+
+    # these are not spider arguments!
+    pos_keywords = []      # type: List[str]
+    neg_keywords = []      # type: List[str]
+
+    def __init__(self, *args, **kwargs):
+        from deepdeep.score_pages import max_ngram_length
+
+        super().__init__(*args, **kwargs)
+        keywords = Path(self.keywords_file).read_text().splitlines()
+        self.pos_keywords = [k for k in keywords if not k.startswith('-')]
+        self.neg_keywords = [k[1:] for k in keywords if k.startswith('-')]
+        self.max_ngram = max_ngram_length(self.pos_keywords)
+        self._save_params_json()
+
+    def relevancy(self, response: Response) -> float:
+        from deepdeep.score_pages import keywords_response_relevancy
+        return keywords_response_relevancy(response,
+                                           pos_keywords=self.pos_keywords,
+                                           neg_keywords=self.neg_keywords,
+                                           max_ngram=self.max_ngram)
 
 
-def keyword_relevancy(response_html: str,
-                      pos_keywords: List[str],
-                      neg_keywords: List[str],
-                      max_ngram=1):
-    text = html2text(response_html).lower()
-    tokens = tokenize(text)
-    tokens = set(token_ngrams(tokens, 1, max_ngram))
+class ClassifierRelevancySpider(_RelevancySpider):
+    name = 'relevant'
+    ALLOWED_ARGUMENTS = _RelevancySpider.ALLOWED_ARGUMENTS | {
+        'classifier_path',
+        'reuse_page_vector',
+    }
+    _ARGS = _RelevancySpider._ARGS | {
+        'classifier_path',
+        'reuse_page_vector',
+    }
 
-    def _score(keywords: List[str]) -> float:
-        s = sum(int(k in tokens) for k in keywords)
-        return _scale_relevancy(s, keywords)
+    # a file with saved page classifier
+    classifier_path = None  # type: str
 
-    pos_score = _score(pos_keywords)
-    neg_score = _score(neg_keywords)
+    # Whether to reuse page vectors. Set it to 0 if classifier
+    # computes its own page vector (not recommended for
+    # performance reasons).
+    reuse_page_vector = 1
 
-    return max(0, pos_score - 0.33 * neg_score)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.classifier_path:
+            raise ValueError("classifier_path is required")
 
+        self.relevancy_clf = joblib.load(self.classifier_path)
+        self.reuse_page_vector = int(self.reuse_page_vector)
 
-def _max_ngram_length(keywords: List[str]) -> int:
-    """
-    >>> _max_ngram_length(["foo"])
-    1
-    >>> _max_ngram_length(["foo", "foo  bar"])
-    2
-    >>> _max_ngram_length(["  foo", "foo bar", "foo bar baz "])
-    3
-    """
-    return max(len(keyword.split()) for keyword in keywords)
+    def relevancy(self, response: Response) -> float:
+        if not isinstance(response, TextResponse):
+            # XXX: only text responses are supported
+            return 0.0
 
+        if self.reuse_page_vector:
+            x = self._page_vector(response)
+        else:
+            x = response.text
 
-def _scale_relevancy(score: float, keywords: List) -> float:
-    """ Weird log scale to use for keyword occurance count """
-    return math.log(score + 1, len(keywords) / 2 + 2)
-
+        return self.relevancy_clf.predict_proba([x])[0][1]
