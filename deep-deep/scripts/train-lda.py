@@ -19,7 +19,7 @@ import joblib
 from tqdm import tqdm
 
 from deepdeep.vectorizers import LDAPageVctorizer
-from deepdeep.exports import iter_jsonlines
+from deepdeep.utils import iter_jsonlines
 
 
 def iter_html(path):

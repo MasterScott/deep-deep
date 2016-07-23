@@ -18,7 +18,8 @@ import joblib
 from docopt import docopt
 from tqdm import tqdm
 from sklearn.pipeline import Pipeline
-from deepdeep.exports import iter_jsonlines
+
+from deepdeep.utils import iter_jsonlines
 
 
 def iter_html(path):
