@@ -47,11 +47,10 @@ def keywords_response_relevancy(response: Response,
     return keyword_relevancy(response.text, pos_keywords, neg_keywords, max_ngram)
 
 
-def keyword_relevancy(response_html: str,
-                      pos_keywords: List[str],
-                      neg_keywords: List[str],
-                      max_ngram=1):
-    text = html2text(response_html).lower()
+def keyword_text_relevancy(text: str,
+                           pos_keywords: List[str],
+                           neg_keywords: List[str],
+                           max_ngram=1):
     tokens = tokenize(text)
     tokens = set(token_ngrams(tokens, 1, max_ngram))
 
@@ -63,6 +62,14 @@ def keyword_relevancy(response_html: str,
     neg_score = _score(neg_keywords)
 
     return max(0, pos_score - 0.33 * neg_score)
+
+
+def keyword_relevancy(response_html: str,
+                      pos_keywords: List[str],
+                      neg_keywords: List[str],
+                      max_ngram=1):
+    text = html2text(response_html).lower()
+    return keyword_text_relevancy(text, pos_keywords, neg_keywords, max_ngram)
 
 
 def max_ngram_length(keywords: List[str]) -> int:
