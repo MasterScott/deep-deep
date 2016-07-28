@@ -9,6 +9,7 @@ from scrapy.http import Response, TextResponse
 
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal
+from deepdeep.utils import html2text
 
 
 class _RelevancySpider(QSpider, metaclass=abc.ABCMeta):
@@ -116,14 +117,16 @@ class ClassifierRelevancySpider(_RelevancySpider):
         'classifier_path',
         'reuse_page_vector',
     }
+    CLASSIFIER_INPUT_ALLOWED_VALUES = ['text', 'html', 'vector']
 
-    # a file with saved page classifier
+    # a file with saved page relevancy classifier
     classifier_path = None  # type: str
 
-    # Whether to reuse page vectors. Set it to 0 if classifier
-    # computes its own page vector (not recommended for
-    # performance reasons).
-    reuse_page_vector = 1
+    # Relevancy classifier input. Allowed values:
+    # * 'text' - use text content of the response (default);
+    # * 'html' - use raw HTML of the response;
+    # * 'vector' - reuse page vector computed for Q learning.
+    classifier_input = 'text'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -131,16 +134,22 @@ class ClassifierRelevancySpider(_RelevancySpider):
             raise ValueError("classifier_path is required")
 
         self.relevancy_clf = joblib.load(self.classifier_path)
-        self.reuse_page_vector = int(self.reuse_page_vector)
+        if self.classifier_input not in self.CLASSIFIER_INPUT_ALLOWED_VALUES:
+            raise ValueError("classifier_input must be one of %r" %
+                             self.CLASSIFIER_INPUT_ALLOWED_VALUES)
 
     def relevancy(self, response: Response) -> float:
         if not isinstance(response, TextResponse):
             # XXX: only text responses are supported
             return 0.0
 
-        if self.reuse_page_vector:
+        if self.classifier_input == 'vector':
             x = self._page_vector(response)
-        else:
+        elif self.classifier_input == 'text':
+            x = html2text(response.text)
+        elif self.classifier_input == 'html':
             x = response.text
+        else:
+            raise ValueError("self.classifier_input is invalid")
 
-        return self.relevancy_clf.predict_proba([x])[0][1]
+        return self.relevancy_clf.predict_proba([x])[0, 1]
