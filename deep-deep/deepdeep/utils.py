@@ -7,6 +7,7 @@ import collections
 from urllib.parse import unquote_plus, urlsplit
 import json
 import gzip
+import zlib
 
 import numpy as np
 import parsel
@@ -230,5 +231,6 @@ def iter_jsonlines(path):
                 except Exception as e:
                     logging.warning("Error found: JSON line can't be decoded. %r" % e)
                     break
-        except EOFError:
+        except (EOFError, zlib.error):
             logging.warning("Error found: tuncated archive.")
+            return

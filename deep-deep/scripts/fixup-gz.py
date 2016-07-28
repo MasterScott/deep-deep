@@ -8,6 +8,7 @@ Extract all readable JSON lines from a truncated gz file. Usage:
 import sys
 import gzip
 import json
+import zlib
 from pathlib import Path
 
 try:
@@ -35,5 +36,5 @@ if __name__ == '__main__':
                     f_out.write(line)
                 else:
                     print("No errors.")
-        except EOFError:
+        except (EOFError, zlib.error):
             print("Error found, tuncated archive.")
