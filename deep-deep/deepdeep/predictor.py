@@ -40,7 +40,10 @@ class LinkClassifier:
             link['domain_from'] = get_domain(url)
             link['domain_to'] = get_domain(link['url'])
 
-        page_vec = self.page_vectorizer.transform([html])
+        if self.page_vectorizer:
+            page_vec = self.page_vectorizer.transform([html])
+        else:
+            page_vec = None
         link_matrix = self.link_vectorizer.transform(links)
         AS = self.Q.join_As(link_matrix, page_vec)
         scores = self.Q.predict(AS)

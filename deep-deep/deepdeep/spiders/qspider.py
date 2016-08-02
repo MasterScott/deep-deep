@@ -157,7 +157,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             self.page_vectorizer.steps[-1][1].verbose = False
         else:
             self.use_pages = int(self.use_pages)
-            self.page_vectorizer = PageVectorizer()
+            self.page_vectorizer = PageVectorizer() if self.use_pages else None
 
         self.total_reward = 0
         self.steps_before_reschedule = 0
