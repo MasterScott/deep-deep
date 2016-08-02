@@ -111,11 +111,11 @@ class ClassifierRelevancySpider(_RelevancySpider):
     name = 'relevant'
     ALLOWED_ARGUMENTS = _RelevancySpider.ALLOWED_ARGUMENTS | {
         'classifier_path',
-        'reuse_page_vector',
+        'classifier_input',
     }
     _ARGS = _RelevancySpider._ARGS | {
         'classifier_path',
-        'reuse_page_vector',
+        'classifier_input',
     }
     CLASSIFIER_INPUT_ALLOWED_VALUES = ['text', 'html', 'vector']
 
