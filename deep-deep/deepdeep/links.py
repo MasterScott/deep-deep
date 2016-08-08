@@ -34,7 +34,9 @@ def extract_js_link(href: str) -> Optional[str]:
         return m.group('url')
 
 
-def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
+def extract_link_dicts(
+        selector: Selector, base_url: str, only_urls: bool=False)\
+        -> Union[Iterator[Dict], Iterator[str]]:
     """
     Extract dicts with link information::
 
@@ -47,6 +49,8 @@ def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
         'inside_text': '<text inside link>',
         # 'before_text': '<text preceeding this link>',
     }
+
+    If only_urls is true, extract only links as strings.
 
     Note that ``base_url`` argument must contain page base URL, which can be
     different from page URL. Use w3lib.html.get_base_url to get it::
@@ -88,17 +92,21 @@ def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
         if url_has_any_extension(url, _IGNORED):
             continue
 
-        link['url'] = url
-        link['attrs'] = dict(attrs)
+        if only_urls:
+            yield url
 
-        link_text = a.xpath('normalize-space()').extract_first(default='')
-        img_link_text = a.xpath('./img/@alt').extract_first(default='')
-        link['inside_text'] = ' '.join([link_text, img_link_text]).strip()
+        else:
+            link['url'] = url
+            link['attrs'] = dict(attrs)
 
-        # TODO: fix before_text and add after_text
-        # link['before_text'] = a.xpath('./preceding::text()[1]').extract_first(default='').strip()[-100:]
+            link_text = a.xpath('normalize-space()').extract_first(default='')
+            img_link_text = a.xpath('./img/@alt').extract_first(default='')
+            link['inside_text'] = ' '.join([link_text, img_link_text]).strip()
 
-        yield link
+            # TODO: fix before_text and add after_text
+            # link['before_text'] = a.xpath('./preceding::text()[1]').extract_first(default='').strip()[-100:]
+
+            yield link
 
 
 def iter_response_link_dicts(response: TextResponse,
