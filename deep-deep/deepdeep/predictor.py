@@ -34,7 +34,7 @@ class LinkClassifier:
         Extract all URLs from html, return a list of (score, url) pairs.
         """
         sel = parsel.Selector(html)
-        base_url = get_base_url(html, url)
+        base_url = get_base_url(html[:4096], url)
         links = list(extract_link_dicts(sel, base_url))
         if not links:
             return []
