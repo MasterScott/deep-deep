@@ -5,6 +5,8 @@ from typing import List, Tuple
 import joblib
 import parsel
 from w3lib.html import get_base_url
+from scrapy.http.response.text import TextResponse
+from scrapy.utils.response import get_base_url as scrapy_get_base_url
 
 from deepdeep.links import extract_link_dicts
 from deepdeep.qlearning import QLearner
@@ -35,6 +37,22 @@ class LinkClassifier:
         """
         sel = parsel.Selector(html)
         base_url = get_base_url(html[:4096], url)
+        return self._extract_urls(html, url, sel, base_url)
+
+    def extract_urls_from_response(self, response: TextResponse):
+        """
+        Extract all URLs from scrapy Response,
+        return a list of (score, url) pairs.
+        """
+        base_url = scrapy_get_base_url(response)
+        return self._extract_urls(response.text, response.url,
+                                  response.selector, base_url)
+
+    def _extract_urls(self,
+                      html: str,
+                      url: str,
+                      sel: parsel.Selector,
+                      base_url: str) -> List[Tuple[float, str]]:
         links = list(extract_link_dicts(sel, base_url))
         if not links:
             return []
