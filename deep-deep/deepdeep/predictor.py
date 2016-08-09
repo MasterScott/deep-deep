@@ -38,8 +38,10 @@ class LinkClassifier:
         links = list(extract_link_dicts(sel, base_url))
         if not links:
             return []
+
+        domain_from = get_domain(url)
         for link in links:
-            link['domain_from'] = get_domain(url)
+            link['domain_from'] = domain_from
             link['domain_to'] = get_domain(link['url'])
 
         if self.page_vectorizer:
