@@ -4,6 +4,7 @@ from typing import List, Tuple
 
 import joblib
 import parsel
+from w3lib.html import get_base_url
 
 from deepdeep.links import extract_link_dicts
 from deepdeep.qlearning import QLearner
@@ -33,7 +34,8 @@ class LinkClassifier:
         Extract all URLs from html, return a list of (score, url) pairs.
         """
         sel = parsel.Selector(html)
-        links = list(extract_link_dicts(sel, url))
+        base_url = get_base_url(html, url)
+        links = list(extract_link_dicts(sel, base_url))
         if not links:
             return []
         for link in links:
