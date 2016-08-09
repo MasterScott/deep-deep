@@ -47,6 +47,21 @@ def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
         'inside_text': '<text inside link>',
         # 'before_text': '<text preceeding this link>',
     }
+
+    Note that ``base_url`` argument must contain page base URL, which can be
+    different from page URL. Use w3lib.html.get_base_url to get it::
+
+        from w3lib.html import get_base_url
+        base_url = get_base_url(html[:4096], page_url)
+        links = list(extract_link_dicts(Selector(html), base_url))
+
+    If you're using Scrapy, and Response object is available, then
+    scrapy.utils.response.get_base_url should be faster::
+
+        from scrapy.utils.response import get_base_url
+        base_url = get_base_url(response)
+        links = list(extract_link_dicts(response.selector, base_url))
+
     """
     selector.remove_namespaces()
 
@@ -88,8 +103,8 @@ def extract_link_dicts(selector: Selector, base_url: str) -> Iterator[Dict]:
 
 def iter_response_link_dicts(response: TextResponse,
                              limit_by_domain: bool=True) -> Iterator[Dict]:
-    base_url = get_base_url(response)
     domain_from = get_domain(response.url)
+    base_url = get_base_url(response)
     for link in extract_link_dicts(response.selector, base_url):
         link['domain_to'] = get_domain(link['url'])
         if limit_by_domain and link['domain_to'] != domain_from:
