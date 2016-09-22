@@ -7,6 +7,34 @@ to learn which links to follow.
 It is called Deep-Deep, but it doesn't use Deep Learning, and it is not only
 for Deep web. Weird.
 
+
+Running
+-------
+
+In order to run the spider, you need some seed urls and a relevancy function
+that will provide reward value for each crawled page. There are some scripts
+in ``./scripts`` with common use-cases:
+
+* ``crawl-forms.py`` learns to find password recovery forms (they are classified
+  with Formasaurus). This is a good benchmark task, because the spider must learn
+  to plan several steps ahead (they are often best reachable via login links).
+* ``crawl-keywords.py`` starts a crawl where relevance function is determined
+  by a keywords file (keywords starting with "-" are considered negative).
+* ``crawl-relevant.py`` start a crawl where reward is given by a
+  classifier that returns a score with ``.predict_proba`` method.
+
+For keywords and relevancy crawlers, the following files will be created
+in the result folder:
+
+* ``items.jl.gz`` - depending on the value of the ``export_cdr`` argument,
+  either items in CDR format will be exported (default),
+  or spider stats, including learning statistics (pass ``-a export_cdr=0``)
+* ``meta.json`` - arguments of the spider
+* ``params.json`` - full spider parameters
+* ``Q-*.joblib`` - Q-model snapshots
+* ``queue-*.csv.gz`` - queue snapshots
+
+
 Testing
 -------
 
