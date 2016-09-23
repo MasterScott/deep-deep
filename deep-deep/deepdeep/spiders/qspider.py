@@ -12,7 +12,6 @@ import joblib
 import numpy as np
 import scipy.sparse as sp
 import networkx as nx
-from formasaurus.utils import get_domain
 import scrapy
 from scrapy.http import TextResponse, Response
 from scrapy.statscollectors import StatsCollector
@@ -25,7 +24,7 @@ from deepdeep.queues import (
     priority_to_score, FLOAT_PRIORITY_MULTIPLIER)
 from deepdeep.scheduler import Scheduler
 from deepdeep.spiders._base import BaseSpider
-from deepdeep.utils import set_request_domain
+from deepdeep.utils import set_request_domain, get_domain
 from deepdeep.qlearning import QLearner
 from deepdeep.utils import log_time
 from deepdeep.vectorizers import LinkVectorizer, PageVectorizer
