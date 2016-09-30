@@ -1,0 +1,7 @@
+*
+!requirements.txt
+!README.rst
+!deep-deep/deepdeep
+!deep-deep/setup.py
+!deep-deep/scrapy.cfg
+**/__pycache__
