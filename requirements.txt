@@ -2,7 +2,6 @@ scrapy==1.1.1
 networkx==1.11
 scikit-learn==0.17.1
 joblib
-formasaurus
 psutil
 numpy
 formasaurus[with_deps]
