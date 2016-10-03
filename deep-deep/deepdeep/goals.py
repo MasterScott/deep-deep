@@ -10,6 +10,7 @@ import abc
 from typing import Callable
 from weakref import WeakKeyDictionary
 from collections import defaultdict
+import logging
 
 from scrapy.http.response.text import TextResponse
 from scrapy.http import Response
@@ -194,11 +195,12 @@ class FormasaurusGoal(BaseGoal):
         score = self._domain_scores[domain]
         should_close = score > self.threshold
         if should_close:
-            print("Domain {} is going to be closed; score={:0.4f}.".format(
+            logging.debug(
+                "Domain {} is going to be closed; score={:0.4f}.".format(
                 domain, score))
         return should_close
 
     def debug_print(self) -> None:
-        print("Scores: sum={:8.1f}, avg={:0.4f}".format(
+        logging.debug("Scores: sum={:8.1f}, avg={:0.4f}".format(
             self._domain_scores.sum(), self._domain_scores.avg()
         ))

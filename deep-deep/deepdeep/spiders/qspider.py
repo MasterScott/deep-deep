@@ -5,6 +5,7 @@ from typing import Dict, Tuple, Union, Optional, List, Iterator
 import abc
 import time
 import gzip
+import logging
 
 import psutil
 import tqdm
@@ -168,7 +169,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     def _save_params_json(self):
         if self.checkpoint_path:
             params = json.dumps(self.get_params(), indent=4)
-            print(params)
+            logging.info(params)
             (Path(self.checkpoint_path)/"params.json").write_text(params)
 
     @abc.abstractmethod
@@ -326,7 +327,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         if self.steps_before_reschedule <= 0:
             num_updated = self.recalculate_request_priorities()
             self.steps_before_reschedule = self._steps_before_rescheduling(num_updated)
-        print("{} steps left before next re-scheduling".format(self.steps_before_reschedule))
+        logging.info("{} steps left before next re-scheduling"
+                     .format(self.steps_before_reschedule))
 
     def close_finished_queues(self):
         for slot in self.scheduler.queue.get_active_slots():
@@ -387,11 +389,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         scores_old_all = np.hstack(scores_old)
         scores_new_all = np.hstack(scores_new)
 
-        print("Top-100 domain ranking: NDCG={:0.4f}".format(
+        logging.info("Top-100 domain ranking: NDCG={:0.4f}".format(
             ndcg_score(domain_scores_new, domain_scores_old, k=100)
         ))
 
-        print("Top-100 request ranking: NDCG={:0.4f}".format(
+        logging.info("Top-100 request ranking: NDCG={:0.4f}".format(
             ndcg_score(scores_new_all, scores_old_all, k=100)
         ))
 
@@ -402,20 +404,20 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         #     for new, old in zip(scores_new, scores_old)
         # ])
         # mean_domain_ndcg = domain_ndcg[~np.isnan(domain_ndcg)].mean()
-        # print("Top-10 micro-averaged in-domain request ranking: NDCG={:0.4f}".format(
+        # logging.info("Top-10 micro-averaged in-domain request ranking: NDCG={:0.4f}".format(
         #     mean_domain_ndcg
         # ))
 
         diff = scores_new_all - scores_old_all
         rmse = np.sqrt((diff ** 2).sum() / diff.size)
         mean_abs_error = np.abs(diff).mean()
-        print("Request score changes: RMSE={:0.4f}, MAE={:0.4}".format(
+        logging.info("Request score changes: RMSE={:0.4f}, MAE={:0.4}".format(
             rmse, mean_abs_error
         ))
 
         for threshold in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
             changed = np.abs(diff) > threshold
-            print("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
+            logging.info("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
                 threshold, changed.sum(), changed.mean(),
             ))
 
@@ -433,26 +435,30 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     def log_stats(self):
         if self.checkpoint_path:
-            print(self.checkpoint_path)
+            logging.debug(self.checkpoint_path)
         examples, AS = self._examples()
         if examples:
             scores_target = self.Q.predict(AS)
             scores_online = self.Q.predict(AS, online=True)
             for ex, score1, score2 in zip(examples, scores_target, scores_online):
-                print(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
+                logging.debug(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
 
-        print("t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
-            self.Q.t_,
-            self.total_reward,
-            self.total_reward / self.Q.t_ if self.Q.t_ else 0,
-            self.Q.coef_norm(online=True),
-            self.Q.coef_norm(online=False),
-        ))
+        logging.debug(
+            "t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}"
+            .format(
+                self.Q.t_,
+                self.total_reward,
+                self.total_reward / self.Q.t_ if self.Q.t_ else 0,
+                self.Q.coef_norm(online=True),
+                self.Q.coef_norm(online=False),
+            ))
         self.goal.debug_print()
 
         stats = self.get_stats_item()
-        print("Domains: {domains_open} open, {domains_closed} closed; "
-              "{todo} requests in queue, {processed} processed, {dropped} dropped".format(**stats))
+        logging.debug(
+            "Domains: {domains_open} open, {domains_closed} closed; "
+            "{todo} requests in queue, {processed} processed, {dropped} dropped"
+            .format(**stats))
 
     def get_stats_item(self):
         domains_open, domains_closed = self._domain_stats()

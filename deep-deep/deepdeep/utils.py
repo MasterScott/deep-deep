@@ -143,7 +143,7 @@ def log_time(func):
             return func(*args, **kwargs)
         finally:
             end = time.time()
-            print("{} took {:0.4f}s".format(func, end-start))
+            logging.debug("{} took {:0.4f}s".format(func, end-start))
     return wrapper
 
 
