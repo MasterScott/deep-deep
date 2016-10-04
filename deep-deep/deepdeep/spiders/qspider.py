@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
-from typing import Dict, Tuple, Union, Optional, List, Iterator
+from typing import Dict, Tuple, Union, Optional, List, Iterator, Set
 import abc
 import time
 import gzip
@@ -163,6 +163,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()
 
+        self.crawled_domains = set()  # type: Set[str]
+        self.relevant_domains = set()  # type: Set[str]
+
         self.checkpoint_interval = int(self.checkpoint_interval)
         self._save_params_json()
 
@@ -261,6 +264,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 r_t1=reward
             )
             self.goal.response_observed(response)
+        domain = get_domain(response.url)
+        self.crawled_domains.add(domain)
+        if reward > 0.5:
+            self.relevant_domains.add(domain)
+
         return list(self._links_to_requests(links, links_matrix)), reward
 
     def _extract_links(self, response: TextResponse) -> List[Dict]:
@@ -467,6 +475,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         dequeued = stats.get_value('custom-scheduler/dequeued/', 0)
         dropped = stats.get_value('custom-scheduler/dropped/', 0)
         todo = enqueued - dequeued - dropped
+        crawled_domains = len(self.crawled_domains)
+        relevant_domains = len(self.relevant_domains)
 
         return {
             '_type': 'stats',
@@ -478,6 +488,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             'processed': dequeued,
             'dropped': dropped,
             'todo': todo,
+            'crawled_domains': crawled_domains,
+            'relevant_domains': relevant_domains,
         }
 
     def _debug_expected_vs_got(self, response: Response):
