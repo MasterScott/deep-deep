@@ -20,8 +20,8 @@ def main():
     arg = parser.add_argument
     arg('q_model')
     arg('data')
-    arg('--limit', type=int)
-    arg('--top', type=int, default=100)
+    arg('--limit', type=int, default=1000)
+    arg('--top', type=int, default=50)
     args = parser.parse_args()
 
     q_model = joblib.load(args.q_model)
@@ -51,7 +51,7 @@ def main():
                 print('Done, now getting features.')
                 vec_name = vec.preprocessor.__name__
                 all_features_names.extend(
-                    '{} {}'.format(vec_name, feature)
+                    '{} ({})'.format(feature, vec_name)
                     for feature in ivec.get_feature_names())
                 print('Done.')
             elif isinstance(vec, FunctionTransformer):
