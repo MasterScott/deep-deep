@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 from itertools import islice
+import pickle
 from typing import List, Dict
 
 from eli5.sklearn.explain_weights import explain_weights
@@ -22,6 +23,7 @@ def main():
     arg('data')
     arg('--limit', type=int, default=1000)
     arg('--top', type=int, default=50)
+    arg('--save-expl')
     args = parser.parse_args()
 
     q_model = joblib.load(args.q_model)
@@ -60,7 +62,12 @@ def main():
         clf = q_model['Q'].clf_online
         expl = explain_weights(
             clf, feature_names=all_features_names, top=args.top)
-        print(format_as_text(expl))
+        if args.save_expl:
+            with open(args.save_expl, 'wb') as f:
+                pickle.dump(expl, f)
+            print('Explanation saved to {}'.format(args.save_expl))
+        else:
+            print(format_as_text(expl))
 
 
 def extract_links(le: DictLinkExtractor, response: TextResponse) -> List[Dict]:
