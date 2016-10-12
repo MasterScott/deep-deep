@@ -9,6 +9,7 @@ from eli5.formatters import format_as_text
 from eli5.sklearn.unhashing import InvertableHashingVectorizer
 import joblib
 import json_lines
+import numpy as np
 from scrapy.http.response.text import TextResponse
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.preprocessing import FunctionTransformer
@@ -45,6 +46,7 @@ def main():
 
         assert not q_model.get('page_vectorizer'), 'TODO'
         all_features_names = []
+        coef_scale = []
         for name, vec in q_model['link_vectorizer'].transformer_list:
             if isinstance(vec, HashingVectorizer):
                 print('Fitting inverse vectorizer for {}'.format(vec))
@@ -54,14 +56,19 @@ def main():
                 vec_name = vec.preprocessor.__name__
                 all_features_names.extend(
                     '{} ({})'.format(feature, vec_name)
-                    for feature in ivec.get_feature_names())
+                    for feature in ivec.get_feature_names(always_signed=False))
+                coef_scale.extend(ivec.column_signs_)
                 print('Done.')
             elif isinstance(vec, FunctionTransformer):
                 all_features_names.append(vec.func.__name__)
+                coef_scale.append(1.)
 
         clf = q_model['Q'].clf_online
         expl = explain_weights(
-            clf, feature_names=all_features_names, top=args.top)
+            clf,
+            feature_names=all_features_names,
+            coef_scale=np.array(coef_scale),
+            top=args.top)
         if args.save_expl:
             with open(args.save_expl, 'wb') as f:
                 pickle.dump(expl, f)
