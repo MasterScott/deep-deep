@@ -5,7 +5,7 @@ import pickle
 from typing import List, Dict
 
 from eli5.sklearn.explain_weights import explain_weights
-from eli5.formatters import format_as_text
+from eli5.formatters import format_as_text, format_as_html
 from eli5.sklearn.unhashing import InvertableHashingVectorizer
 import joblib
 import json_lines
@@ -25,6 +25,7 @@ def main():
     arg('--limit', type=int, default=1000)
     arg('--top', type=int, default=50)
     arg('--save-expl')
+    arg('--save-html')
     args = parser.parse_args()
 
     q_model = joblib.load(args.q_model)
@@ -72,8 +73,12 @@ def main():
         if args.save_expl:
             with open(args.save_expl, 'wb') as f:
                 pickle.dump(expl, f)
-            print('Explanation saved to {}'.format(args.save_expl))
-        else:
+            print('Pickled explanation saved to {}'.format(args.save_expl))
+        if args.save_html:
+            with open(args.save_html, 'wt') as f:
+                f.write(format_as_html(expl))
+            print('Explanation in html saved to {}'.format(args.save_html))
+        if not args.save_expl and not args.save_html:
             print(format_as_text(expl))
 
 
