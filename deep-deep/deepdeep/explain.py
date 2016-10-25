@@ -1,11 +1,11 @@
 from typing import Dict, List, Tuple, Union
 
 from scrapy.http.response.text import TextResponse
-from eli5.formatters import format_as_html
 from eli5.sklearn import explain_prediction
 from eli5.sklearn.text import get_weighted_spans
 from eli5.sklearn.unhashing import InvertableHashingVectorizer
 from eli5.sklearn.utils import FeatureNames
+from eli5.formatters import EscapedFeatureName
 import numpy as np
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.pipeline import FeatureUnion
@@ -62,7 +62,7 @@ def links_explanations(clf, vec: FeatureUnion, links: List[Dict]) -> List[Dict]:
     feature_names = get_feature_names_scales(vec, links, with_scales=False)
     for link in links:
         expl = explain_prediction(
-            clf, link, vec, feature_names=feature_names, top=100)
+            clf, link, vec, feature_names=feature_names, top=1000)
         target_expl = expl['targets'][0]
         add_weighted_spans(link, target_expl, vec)
         all_expl.append((target_expl['score'], link, expl))
@@ -70,7 +70,8 @@ def links_explanations(clf, vec: FeatureUnion, links: List[Dict]) -> List[Dict]:
 
 
 def add_weighted_spans(link, target_expl, vectorizer):
-    ws_combined = {'document': '', 'weighted_spans': [], 'not_found': {}}
+    ws_combined = {
+        'document': '', 'weighted_spans': [], 'other': {'pos': [], 'neg': []}}
     for vec_idx in [0, 2]:
         vec = vectorizer.transformer_list[vec_idx][1]
         vec_name = vec.preprocessor.__name__
@@ -84,24 +85,28 @@ def add_weighted_spans(link, target_expl, vectorizer):
                 }
         ws = get_weighted_spans(
             link, vec=vec, feature_weights=feature_weights)
-        ws_combined['document'] += ' | '
+        ws_combined['analyzer'] = ws['analyzer']
+        if ws_combined['document']:
+            ws_combined['document'] += ' | '
         s0 = len(ws_combined['document'])
         ws_combined['document'] += ws['document']
         shifted_spans = [
             (feature, [(s0 + s, s0 + e) for s, e in spans], weight)
             for feature, spans, weight in ws['weighted_spans']]
         ws_combined['weighted_spans'].extend(shifted_spans)
-        for f, w in ws['not_found'].items():
-            ws_combined['not_found'][f] = w
-    for f, _, _ in ws_combined['weighted_spans']:
-        ws_combined['not_found'].pop(f, None)
+        for key, other in ws_combined['other'].items():
+            # Ignore pos_remaining and neg_remaining, top should be large enough
+            other_features = {f for f, _ in other}
+            for f, w in ws['other'][key]:
+                if str(f) == 'Highlighted in text (sum)':
+                    f = EscapedFeatureName('{}, {}'.format(f, vec_name))
+                    other.append((f, w))
+                elif f not in other_features:
+                    other.append((f, w))
+    found_features = {f for f, _, _ in ws_combined['weighted_spans']}
+    for other in ws_combined['other'].values():
+        other[:] = [(f, w) for f, w in other if f not in found_features]
     target_expl['weighted_spans'] = ws_combined
-
-
-#   html_expl = format_as_html(expl, include_styles=False, force_weights=False)
-#   html_expl = html_expl.replace('<p>Explained as: linear model</p>', '')
-#   # show_html(html_expl)
-#   all_expl.append((target_expl['score'], link, expl, html_expl))
 
 
 def extract_links(le: DictLinkExtractor, response: TextResponse) -> List[Dict]:
