@@ -105,7 +105,8 @@ def add_weighted_spans(link, target_expl, vectorizer):
                     other.append((f, w))
     found_features = {f for f, _, _ in ws_combined['weighted_spans']}
     for other in ws_combined['other'].values():
-        other[:] = [(f, w) for f, w in other if f not in found_features]
+        other[:] = sorted(((f, w) for f, w in other if f not in found_features),
+                          key=lambda x: abs(x[1]), reverse=True)
     target_expl['weighted_spans'] = ws_combined
 
 

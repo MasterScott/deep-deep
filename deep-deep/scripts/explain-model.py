@@ -16,12 +16,13 @@ from deepdeep.explain import item_links, get_feature_names_scales
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
-    arg('q_model')
-    arg('data')
-    arg('--limit', type=int, default=1000)
-    arg('--top', type=int, default=50)
-    arg('--save-expl')
-    arg('--save-html')
+    arg('q_model', help='Path to Q.joblib (deep-deep link model)')
+    arg('data', help='Path to jl.gz file in CDR format')
+    arg('--limit', type=int, default=1000,
+        help='Documents for hashing vectorizer fitting')
+    arg('--top', type=int, default=50, help='Top features (passed to eli5)')
+    arg('--save-expl', help='Save pickled explanation')
+    arg('--save-html', help='Save explanation in html')
     args = parser.parse_args()
 
     q_model = joblib.load(args.q_model)
