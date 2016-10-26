@@ -27,13 +27,9 @@ def get_feature_names_scales(
         if isinstance(vec, HashingVectorizer):
             ivec = InvertableHashingVectorizer(vec)
             ivec.fit(links)
-            vec_name = vec.preprocessor.__name__
             feature_names = ivec.get_feature_names(always_signed=False)
             all_features_names.update(
-                (n_features + idx,
-                 '{} {}'.format(vec_name, name) if isinstance(name, str)
-                 else [{'name': '{} {}'.format(vec_name, n['name']),
-                        'sign': n['sign']} for n in name])
+                (n_features + idx, [dict(n, vec=vec) for n in name])
                 for idx, name in feature_names.feature_names.items())
             if with_scales:
                 coef_scales.append(ivec.column_signs_)
@@ -76,9 +72,8 @@ def add_weighted_spans(link, target_expl, vectorizer):
         vec = vectorizer.transformer_list[vec_idx][1]
         vec_name = vec.preprocessor.__name__
         feature_weights = {key: [
-                (name if isinstance(name, str) else [
-                    {'name': n['name'].split(' ', 1)[1], 'sign': n['sign']}
-                    for n in name if n['name'].split()[0] == vec_name],
+                (name if isinstance(name, str) else
+                 [n for n in name if n['vec'] == vec],
                  coef)
                 for name, coef in target_expl['feature_weights'][key]]
                 for key in ['pos', 'neg']
