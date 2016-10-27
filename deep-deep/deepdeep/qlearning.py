@@ -73,6 +73,8 @@ with all features joined. It requires ~2x RAM because multiple
 10x faster.
 """
 from __future__ import absolute_import
+from collections import deque
+import logging
 import random
 from typing import Callable, List, Tuple, Any, Optional
 
@@ -80,6 +82,8 @@ import numpy as np
 from scipy import sparse
 import sklearn.base
 from sklearn.linear_model import SGDRegressor
+from sklearn.metrics import mean_absolute_error
+from sklearn.utils.validation import NotFittedError
 
 from deepdeep.utils import log_time
 
@@ -186,9 +190,12 @@ class QLearner:
             alpha=1e-6,
             eta0=0.1,
         )
+        self.recent_mae_train = deque(maxlen=100)
+        self.recent_mae_valid = deque(maxlen=100)
 
         self.clf_target = sklearn.base.clone(self.clf_online)  # type: SGDRegressor
         self.memory = ExperienceMemory(maxsize=er_maxsize)
+        self.valid_memory = ExperienceMemory(maxsize=er_maxsize)
         self.t_ = 0
 
     @classmethod
@@ -222,7 +229,8 @@ class QLearner:
         """
         self.t_ += 1
         if not self.dummy:
-            self.memory.add(as_t=as_t, AS_t1=AS_t1, r_t1=r_t1)
+            memory = self.valid_memory if random.random() > 0.8 else self.memory
+            memory.add(as_t=as_t, AS_t1=AS_t1, r_t1=r_t1)
 
             if (self.t_ % self.fit_interval) == 0:
                 self.fit_iteration(self.replay_sample_size)
@@ -294,13 +302,37 @@ class QLearner:
         Update online Q function using random examples from the experience
         replay memory.
         """
-        sample = self.memory.sample(sample_size)
+        if len(self.valid_memory):
+            X_valid, y_valid = self._get_X_y(
+                self.valid_memory.sample(sample_size))
+            try:
+                y_valid_pred = self.clf_online.predict(X_valid)
+            except NotFittedError:
+                pass
+            else:
+                mae = mean_absolute_error(y_valid_pred, y_valid)
+                self.recent_mae_valid.append(mae)
+                logging.info('MAE valid: {:.4f}, recent mean: {:.4f}'.format(
+                    mae, np.mean(self.recent_mae_valid)))
+        X_train, y_train = self._get_X_y(self.memory.sample(sample_size))
+        try:
+            y_pred = self.clf_online.predict(X_train)
+        except NotFittedError:
+            pass
+        else:
+            mae = mean_absolute_error(y_pred, y_train)
+            self.recent_mae_train.append(mae)
+            logging.info('MAE train: {:.4f}, recent mean: {:.4f}'.format(
+                mae, np.mean(self.recent_mae_train)))
+        self.clf_online.partial_fit(X_train, y_train)
+
+    def _get_X_y(self, sample):
         as_t_list, AS_t1_list, r_t1_list = zip(*sample)
         rewards = np.asarray(r_t1_list)
         X = sparse.vstack(as_t_list)
         Q_t1_vector = self._get_Q_t1_values(rewards.shape, AS_t1_list)
         y = rewards + self.gamma * Q_t1_vector
-        self.clf_online.partial_fit(X, y)
+        return X, y
 
     def _get_Q_t1_values(self,
                          shape: Tuple,
