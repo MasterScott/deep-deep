@@ -31,6 +31,7 @@ from deepdeep.utils import log_time
 from deepdeep.vectorizers import LinkVectorizer, PageVectorizer
 from deepdeep.goals import BaseGoal
 from deepdeep.metrics import ndcg_score
+from deepdeep import tflog
 
 
 class QSpider(BaseSpider, metaclass=abc.ABCMeta):
@@ -168,6 +169,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
         self.checkpoint_interval = int(self.checkpoint_interval)
         self._save_params_json()
+        if self.checkpoint_path:
+            tflog.configure(self.checkpoint_path)
 
     def _save_params_json(self):
         if self.checkpoint_path:
@@ -451,16 +454,19 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             for ex, score1, score2 in zip(examples, scores_target, scores_online):
                 logging.debug(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
 
+        avg_reward = self.total_reward / self.Q.t_ if self.Q.t_ else 0
         logging.debug(
             "t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}"
             .format(
                 self.Q.t_,
                 self.total_reward,
-                self.total_reward / self.Q.t_ if self.Q.t_ else 0,
+                avg_reward,
                 self.Q.coef_norm(online=True),
                 self.Q.coef_norm(online=False),
             ))
         self.goal.debug_print()
+        tflog.log_value('return', self.total_reward, self.Q.t_)
+        tflog.log_value('avg reward', avg_reward, self.Q.t_)
 
         stats = self.get_stats_item()
         logging.debug(

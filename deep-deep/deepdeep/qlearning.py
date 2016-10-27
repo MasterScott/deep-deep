@@ -86,6 +86,7 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.utils.validation import NotFittedError
 
 from deepdeep.utils import log_time
+from deepdeep.tflog import log_value
 
 
 class QLearner:
@@ -312,6 +313,7 @@ class QLearner:
             else:
                 mae = mean_absolute_error(y_valid_pred, y_valid)
                 self.recent_mae_valid.append(mae)
+                log_value('MAE valid', mae, self.t_)
                 logging.info('MAE valid: {:.4f}, recent mean: {:.4f}'.format(
                     mae, np.mean(self.recent_mae_valid)))
         X_train, y_train = self._get_X_y(self.memory.sample(sample_size))
@@ -322,6 +324,7 @@ class QLearner:
         else:
             mae = mean_absolute_error(y_pred, y_train)
             self.recent_mae_train.append(mae)
+            log_value('MAE train', mae, self.t_)
             logging.info('MAE train: {:.4f}, recent mean: {:.4f}'.format(
                 mae, np.mean(self.recent_mae_train)))
         self.clf_online.partial_fit(X_train, y_train)
