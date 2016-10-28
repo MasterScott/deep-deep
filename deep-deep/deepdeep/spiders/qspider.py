@@ -168,12 +168,28 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
         self.checkpoint_interval = int(self.checkpoint_interval)
         self._save_params_json()
+        self._setup_tensorboard_logger()
 
     def _save_params_json(self):
         if self.checkpoint_path:
             params = json.dumps(self.get_params(), indent=4)
             logging.info(params)
             (Path(self.checkpoint_path)/"params.json").write_text(params)
+
+    def _setup_tensorboard_logger(self):
+        if self.checkpoint_path:
+            try:
+                import tensorboard_logger
+            except ImportError:
+                logging.warning('tensorboard_logger not available')
+                self._tensortboard_logger = None
+            else:
+                tensorboard_logger.configure(self.checkpoint_path, flush_secs=5)
+                self._tensortboard_logger = tensorboard_logger.log_value
+
+    def log_value(self, name, value):
+        if self._tensortboard_logger:
+            self._tensortboard_logger(name, value, self.Q.t_)
 
     @abc.abstractmethod
     def get_goal(self) -> BaseGoal:
@@ -451,22 +467,38 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             for ex, score1, score2 in zip(examples, scores_target, scores_online):
                 logging.debug(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
 
+        average_reward = self.total_reward / self.Q.t_ if self.Q.t_ else 0
+        coef_norm_online = self.Q.coef_norm(online=True)
+        coef_norm_target = self.Q.coef_norm(online=False)
         logging.debug(
             "t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}"
             .format(
                 self.Q.t_,
                 self.total_reward,
-                self.total_reward / self.Q.t_ if self.Q.t_ else 0,
-                self.Q.coef_norm(online=True),
-                self.Q.coef_norm(online=False),
+                average_reward,
+                coef_norm_online,
+                coef_norm_target,
             ))
         self.goal.debug_print()
+        self.log_value('Reward/total', self.total_reward)
+        self.log_value('Reward/average', average_reward)
+        self.log_value('Coef/norm_online', coef_norm_online)
+        self.log_value('Coef/norm_target', coef_norm_target)
 
         stats = self.get_stats_item()
         logging.debug(
             "Domains: {domains_open} open, {domains_closed} closed; "
-            "{todo} requests in queue, {processed} processed, {dropped} dropped"
+            "{todo} requests in queue, {processed} processed, "
+            "{dropped} dropped, {crawled_domains} crawled, "
+            "{relevant_domains} relevant."
             .format(**stats))
+        self.log_value('Domains/crawled', stats['crawled_domains'])
+        self.log_value('Domains/relevant', stats['relevant_domains'])
+        self.log_value('Domains/open', stats['domains_open'])
+        self.log_value('Domains/closed', stats['domains_closed'])
+        self.log_value('Queue/todo', stats['todo'])
+        self.log_value('Queue/processed', stats['processed'])
+        self.log_value('Queue/dropped', stats['dropped'])
 
     def get_stats_item(self):
         domains_open, domains_closed = self._domain_stats()

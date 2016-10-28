@@ -34,6 +34,9 @@ in the result folder:
 * ``Q-*.joblib`` - Q-model snapshots
 * ``queue-*.csv.gz`` - queue snapshots
 
+If you additionally install tensorboard_logger_, an event log in TensorBoard_
+format will be written to result folder.
+
 
 Testing
 -------
@@ -46,3 +49,5 @@ It requires Python 3.5+, pytest_ and `mypy-lang`_.
 
 .. _pytest: http://pytest.org/latest/
 .. _mypy-lang: http://mypy-lang.org/
+.. _tensorboard_logger: https://github.com/TeamHG-Memex/tensorboard_logger/
+.. _TensorBoard: https://www.tensorflow.org/how_tos/summaries_and_tensorboard/
