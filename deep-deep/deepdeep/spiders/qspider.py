@@ -188,7 +188,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 self._tensortboard_logger = tensorboard_logger.log_value
 
     def log_value(self, name, value):
-        if self._tensortboard_logger:
+        if self._tensortboard_logger and self.Q.t_ % 10 == 0:
+            # Throttle logging to reduce overhead
             self._tensortboard_logger(name, value, self.Q.t_)
 
     @abc.abstractmethod
