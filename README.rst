@@ -49,6 +49,5 @@ It requires Python 3.5+, pytest_ and `mypy-lang`_.
 
 .. _pytest: http://pytest.org/latest/
 .. _mypy-lang: http://mypy-lang.org/
-.. _tensorboard_logger: https://github.com/TeamHG-Memex/tensorboard_logger/
 .. _TensorBoard: https://www.tensorflow.org/how_tos/summaries_and_tensorboard/
 .. _TensorFlow: https://www.tensorflow.org/
