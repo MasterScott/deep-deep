@@ -17,6 +17,7 @@ import scrapy
 from scrapy.http import TextResponse, Response
 from scrapy.statscollectors import StatsCollector
 from scrapy_cdr.utils import text_cdr_item
+import tensorboard_logger
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
@@ -178,19 +179,14 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     def _setup_tensorboard_logger(self):
         if self.checkpoint_path:
-            try:
-                import tensorboard_logger
-            except ImportError:
-                logging.warning('tensorboard_logger not available')
-                self._tensortboard_logger = None
-            else:
-                tensorboard_logger.configure(self.checkpoint_path, flush_secs=5)
-                self._tensortboard_logger = tensorboard_logger.log_value
+            self._tensortboard_logger = tensorboard_logger.Logger(
+                self.checkpoint_path, flush_secs=5)
+        else:
+            self._tensortboard_logger = None
 
     def log_value(self, name, value):
-        if self._tensortboard_logger and self.Q.t_ % 10 == 0:
-            # Throttle logging to reduce overhead
-            self._tensortboard_logger(name, value, self.Q.t_)
+        if self._tensortboard_logger:
+            self._tensortboard_logger.log_value(name, value, step=self.Q.t_)
 
     @abc.abstractmethod
     def get_goal(self) -> BaseGoal:
