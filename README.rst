@@ -33,6 +33,9 @@ in the result folder:
 * ``params.json`` - full spider parameters
 * ``Q-*.joblib`` - Q-model snapshots
 * ``queue-*.csv.gz`` - queue snapshots
+* ``events.out.tfevents.*`` - a log in TensorBoard_ format. Install
+  TensorFlow_ to view it with ``tensorboard --logdir <result folder parent>``
+  command.
 
 
 Testing
@@ -46,3 +49,5 @@ It requires Python 3.5+, pytest_ and `mypy-lang`_.
 
 .. _pytest: http://pytest.org/latest/
 .. _mypy-lang: http://mypy-lang.org/
+.. _TensorBoard: https://www.tensorflow.org/how_tos/summaries_and_tensorboard/
+.. _TensorFlow: https://www.tensorflow.org/

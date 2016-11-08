@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 import abc
 from pathlib import Path
+import pickle
 from typing import List, Optional
 
 import joblib
@@ -133,7 +134,11 @@ class ClassifierRelevancySpider(_RelevancySpider):
         if not self.classifier_path:
             raise ValueError("classifier_path is required")
 
-        self.relevancy_clf = joblib.load(self.classifier_path)
+        if self.classifier_path.endswith('.pkl'):
+            with open(self.classifier_path, 'wb') as f:
+                self.relevancy_clf = pickle.load(f)
+        else:
+            self.relevancy_clf = joblib.load(self.classifier_path)
         if self.classifier_input not in self.CLASSIFIER_INPUT_ALLOWED_VALUES:
             raise ValueError("classifier_input must be one of %r" %
                              self.CLASSIFIER_INPUT_ALLOWED_VALUES)

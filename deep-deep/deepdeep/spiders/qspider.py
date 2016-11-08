@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
-from typing import Dict, Tuple, Union, Optional, List, Iterator
+from typing import Dict, Tuple, Union, Optional, List, Iterator, Set
 import abc
 import time
 import gzip
+import logging
 
 import psutil
 import tqdm
@@ -16,6 +17,7 @@ import scrapy
 from scrapy.http import TextResponse, Response
 from scrapy.statscollectors import StatsCollector
 from scrapy_cdr.utils import text_cdr_item
+import tensorboard_logger
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
@@ -162,14 +164,29 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()
 
+        self.crawled_domains = set()  # type: Set[str]
+        self.relevant_domains = set()  # type: Set[str]
+
         self.checkpoint_interval = int(self.checkpoint_interval)
         self._save_params_json()
+        self._setup_tensorboard_logger()
 
     def _save_params_json(self):
         if self.checkpoint_path:
             params = json.dumps(self.get_params(), indent=4)
-            print(params)
+            logging.info(params)
             (Path(self.checkpoint_path)/"params.json").write_text(params)
+
+    def _setup_tensorboard_logger(self):
+        if self.checkpoint_path:
+            self._tensortboard_logger = tensorboard_logger.Logger(
+                self.checkpoint_path, flush_secs=5)
+        else:
+            self._tensortboard_logger = None
+
+    def log_value(self, name, value):
+        if self._tensortboard_logger:
+            self._tensortboard_logger.log_value(name, value, step=self.Q.t_)
 
     @abc.abstractmethod
     def get_goal(self) -> BaseGoal:
@@ -260,6 +277,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 r_t1=reward
             )
             self.goal.response_observed(response)
+        domain = get_domain(response.url)
+        self.crawled_domains.add(domain)
+        if reward > 0.5:
+            self.relevant_domains.add(domain)
+
         return list(self._links_to_requests(links, links_matrix)), reward
 
     def _extract_links(self, response: TextResponse) -> List[Dict]:
@@ -326,7 +348,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         if self.steps_before_reschedule <= 0:
             num_updated = self.recalculate_request_priorities()
             self.steps_before_reschedule = self._steps_before_rescheduling(num_updated)
-        print("{} steps left before next re-scheduling".format(self.steps_before_reschedule))
+        logging.info("{} steps left before next re-scheduling"
+                     .format(self.steps_before_reschedule))
 
     def close_finished_queues(self):
         for slot in self.scheduler.queue.get_active_slots():
@@ -387,11 +410,11 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         scores_old_all = np.hstack(scores_old)
         scores_new_all = np.hstack(scores_new)
 
-        print("Top-100 domain ranking: NDCG={:0.4f}".format(
+        logging.info("Top-100 domain ranking: NDCG={:0.4f}".format(
             ndcg_score(domain_scores_new, domain_scores_old, k=100)
         ))
 
-        print("Top-100 request ranking: NDCG={:0.4f}".format(
+        logging.info("Top-100 request ranking: NDCG={:0.4f}".format(
             ndcg_score(scores_new_all, scores_old_all, k=100)
         ))
 
@@ -402,20 +425,20 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         #     for new, old in zip(scores_new, scores_old)
         # ])
         # mean_domain_ndcg = domain_ndcg[~np.isnan(domain_ndcg)].mean()
-        # print("Top-10 micro-averaged in-domain request ranking: NDCG={:0.4f}".format(
+        # logging.info("Top-10 micro-averaged in-domain request ranking: NDCG={:0.4f}".format(
         #     mean_domain_ndcg
         # ))
 
         diff = scores_new_all - scores_old_all
         rmse = np.sqrt((diff ** 2).sum() / diff.size)
         mean_abs_error = np.abs(diff).mean()
-        print("Request score changes: RMSE={:0.4f}, MAE={:0.4}".format(
+        logging.info("Request score changes: RMSE={:0.4f}, MAE={:0.4}".format(
             rmse, mean_abs_error
         ))
 
         for threshold in [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]:
             changed = np.abs(diff) > threshold
-            print("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
+            logging.info("    Changed by more than {:0.2f}: {:d} ({:0.1%})".format(
                 threshold, changed.sum(), changed.mean(),
             ))
 
@@ -433,26 +456,46 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     def log_stats(self):
         if self.checkpoint_path:
-            print(self.checkpoint_path)
+            logging.debug(self.checkpoint_path)
         examples, AS = self._examples()
         if examples:
             scores_target = self.Q.predict(AS)
             scores_online = self.Q.predict(AS, online=True)
             for ex, score1, score2 in zip(examples, scores_target, scores_online):
-                print(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
+                logging.debug(" {:0.4f} {:0.4f} {}".format(score1, score2, ex))
 
-        print("t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}".format(
-            self.Q.t_,
-            self.total_reward,
-            self.total_reward / self.Q.t_ if self.Q.t_ else 0,
-            self.Q.coef_norm(online=True),
-            self.Q.coef_norm(online=False),
-        ))
+        average_reward = self.total_reward / self.Q.t_ if self.Q.t_ else 0
+        coef_norm_online = self.Q.coef_norm(online=True)
+        coef_norm_target = self.Q.coef_norm(online=False)
+        logging.debug(
+            "t={}, return={:0.4f}, avg reward={:0.4f}, L2 norm: {:0.4f} {:0.4f}"
+            .format(
+                self.Q.t_,
+                self.total_reward,
+                average_reward,
+                coef_norm_online,
+                coef_norm_target,
+            ))
         self.goal.debug_print()
+        self.log_value('Reward/total', self.total_reward)
+        self.log_value('Reward/average', average_reward)
+        self.log_value('Coef/norm_online', coef_norm_online)
+        self.log_value('Coef/norm_target', coef_norm_target)
 
         stats = self.get_stats_item()
-        print("Domains: {domains_open} open, {domains_closed} closed; "
-              "{todo} requests in queue, {processed} processed, {dropped} dropped".format(**stats))
+        logging.debug(
+            "Domains: {domains_open} open, {domains_closed} closed; "
+            "{todo} requests in queue, {processed} processed, "
+            "{dropped} dropped, {crawled_domains} crawled, "
+            "{relevant_domains} relevant."
+            .format(**stats))
+        self.log_value('Domains/crawled', stats['crawled_domains'])
+        self.log_value('Domains/relevant', stats['relevant_domains'])
+        self.log_value('Domains/open', stats['domains_open'])
+        self.log_value('Domains/closed', stats['domains_closed'])
+        self.log_value('Queue/todo', stats['todo'])
+        self.log_value('Queue/processed', stats['processed'])
+        self.log_value('Queue/dropped', stats['dropped'])
 
     def get_stats_item(self):
         domains_open, domains_closed = self._domain_stats()
@@ -461,6 +504,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         dequeued = stats.get_value('custom-scheduler/dequeued/', 0)
         dropped = stats.get_value('custom-scheduler/dropped/', 0)
         todo = enqueued - dequeued - dropped
+        crawled_domains = len(self.crawled_domains)
+        relevant_domains = len(self.relevant_domains)
 
         return {
             '_type': 'stats',
@@ -472,6 +517,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             'processed': dequeued,
             'dropped': dropped,
             'todo': todo,
+            'crawled_domains': crawled_domains,
+            'relevant_domains': relevant_domains,
         }
 
     def _debug_expected_vs_got(self, response: Response):
