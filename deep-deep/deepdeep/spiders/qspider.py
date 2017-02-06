@@ -26,9 +26,8 @@ from deepdeep.queues import (
     priority_to_score, FLOAT_PRIORITY_MULTIPLIER)
 from deepdeep.scheduler import Scheduler
 from deepdeep.spiders._base import BaseSpider
-from deepdeep.utils import set_request_domain, get_domain
 from deepdeep.qlearning import QLearner
-from deepdeep.utils import log_time
+from deepdeep.utils import set_request_domain, get_domain, log_time, chunks
 from deepdeep.vectorizers import LinkVectorizer, PageVectorizer
 from deepdeep.goals import BaseGoal
 from deepdeep.metrics import ndcg_score
@@ -51,8 +50,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         'double', 'use_urls', 'use_full_urls', 'use_same_domain',
         'use_pages', 'page_vectorizer_path',
         'eps', 'balancing_temperature', 'gamma',
-        'replay_sample_size', 'replay_maxsize', 'steps_before_switch',
-        'checkpoint_path', 'checkpoint_interval',
+        'replay_sample_size', 'replay_maxsize', 'replay_maxlinks',
+        'domain_queue_maxsize', 'steps_before_switch',
+        'checkpoint_path', 'checkpoint_interval', 'checkpoint_latest',
         'baseline', 'export_cdr',
     }
     ALLOWED_ARGUMENTS = _ARGS | BaseSpider.ALLOWED_ARGUMENTS
@@ -107,11 +107,20 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     # about 10Kb on average.
     replay_maxsize = 100000
 
+    # Maximum number of links: useful to limit when running separate spiders
+    # for each domain. No limit by default.
+    replay_maxlinks = 0
+
+    domain_queue_maxsize = 0  # no limit by default
+
     # current model is saved every checkpoint_interval timesteps
     checkpoint_interval = 1000
 
     # Where to store checkpoints. By default they are not stored.
     checkpoint_path = None  # type: Optional[str]
+
+    # Store only latest checkpoint to save disk space.
+    checkpoint_latest = 0
 
     # Is spider allowed to follow out-of-domain links?
     # XXX: it is not enough to set this to False; a middleware should be also
@@ -136,6 +145,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
         self.replay_maxsize = int(self.replay_maxsize)
+        self.replay_maxlinks = int(self.replay_maxlinks)
+        self.domain_queue_maxsize = int(self.domain_queue_maxsize)
         self.baseline = bool(int(self.baseline))
         self.Q = QLearner(
             steps_before_switch=self.steps_before_switch,
@@ -146,6 +157,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             pickle_memory=False,
             dummy=self.baseline,
             er_maxsize=self.replay_maxsize,
+            er_maxlinks=self.replay_maxlinks,
         )
         self.link_vectorizer = LinkVectorizer(
             use_url=bool(self.use_urls),
@@ -168,6 +180,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.relevant_domains = set()  # type: Set[str]
 
         self.checkpoint_interval = int(self.checkpoint_interval)
+        self.checkpoint_latest = bool(int(self.checkpoint_latest))
         self._save_params_json()
         self._setup_tensorboard_logger()
 
@@ -185,7 +198,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             self._tensortboard_logger = None
 
     def log_value(self, name, value):
-        if self._tensortboard_logger:
+        if self._tensortboard_logger and self.Q.t_ % 20 == 0:
             self._tensortboard_logger.log_value(name, value, step=self.Q.t_)
 
     @abc.abstractmethod
@@ -265,6 +278,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         links = self._extract_links(response)
         links_matrix = self.link_vectorizer.transform(links) if links else None
         links_matrix = self.Q.join_As(links_matrix, page_vector)
+        if links_matrix is not None:
+            links_matrix = links_matrix.astype(np.float32)  # saving memory
 
         reward = 0
         if not self.is_seed(response):
@@ -331,7 +346,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         to create a new queue.
         """
         def new_queue(domain):
-            return RequestsPriorityQueue(fifo=True)
+            return RequestsPriorityQueue(fifo=True,
+                                         maxsize=self.domain_queue_maxsize)
         return BalancedPriorityQueue(
             queue_factory=new_queue,
             eps=self.eps,
@@ -376,7 +392,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 vectors.append(request.meta['link_vector'])
                 indices.append(idx)
             if vectors:
-                scores = self.Q.predict(sp.vstack(vectors))
+                scores = np.concatenate([self.Q.predict(sp.vstack(batch))
+                                         for batch in chunks(vectors, 4096)])
                 priorities[indices] = scores * FLOAT_PRIORITY_MULTIPLIER
 
             # keep scores in order to compute metrics later
@@ -407,6 +424,8 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         #
         domain_scores_old = np.array([p.max() if p.size else 0 for p in scores_old])
         domain_scores_new = np.array([p.max() if p.size else 0 for p in scores_new])
+        if len(scores_new) == 0:
+            return 0
         scores_old_all = np.hstack(scores_old)
         scores_new_all = np.hstack(scores_new)
 
@@ -553,10 +572,18 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         if not self.checkpoint_path:
             return
         path = Path(self.checkpoint_path)
-        self.dump_policy(path/("Q-%s.joblib" % self.Q.t_), False)
-        # self.dump_policy(path/("Q-latest.joblib"), True)
+        id_ = 'latest' if self.checkpoint_latest else self.Q.t_
+        self.dump_policy(path/("Q-%s.joblib" % id_), False)
         self.dump_crawl_graph(path/"graph.pickle")
-        self.dump_queue(path/("queue-%s.csv.gz" % self.Q.t_))
+        self.dump_queue(path/("queue-%s.csv.gz" % id_))
+        # Logging queue memory stats only on checkpoints because we need
+        # to do a linear scan over all queues, which can be slow.
+        queue = self.scheduler.queue
+        self.logger.info(
+            'Queue entries {:,}, vectors bytes {:,}; '
+            'Replay entries {:,}, vectors bytes {:,}'
+            .format(len(queue), queue.nbytes(),
+                    len(self.Q.memory), self.Q.memory.nbytes()))
 
     @log_time
     def dump_crawl_graph(self, path) -> None:
