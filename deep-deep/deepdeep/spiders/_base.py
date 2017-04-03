@@ -43,7 +43,7 @@ class BaseSpider(scrapy.Spider):
             if k not in self.ALLOWED_ARGUMENTS:
                 raise ValueError(
                     "Unsupported argument: %s. Supported arguments: %r" % (
-                        k, self.ALLOWED_ARGUMENTS)
+                        k, sorted(self.ALLOWED_ARGUMENTS))
                 )
 
     def start_requests(self):
