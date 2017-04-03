@@ -86,10 +86,18 @@ SPIDER_MIDDLEWARES = {
 }
 CRAWLGRAPH_ENABLED = False
 
+AUTOLOGIN_URL = 'http://127.0.0.1:8089'
+AUTOLOGIN_ENABLED = False  # enable cookies too
+
 # Enable or disable downloader middlewares
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
+   'deepdeep.downloadermiddlewares.ProxyFromSettingsMiddleware': 10,
    'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': 543,
+   # autologin
+   'autologin_middleware.AutologinMiddleware': 605,
+   'scrapy.downloadermiddlewares.cookies.CookiesMiddleware': None,
+   'autologin_middleware.ExposeCookiesMiddleware': 700,
 }
 
 # Enable or disable extensions
