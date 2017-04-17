@@ -23,6 +23,10 @@ in ``./scripts`` with common use-cases:
 * ``crawl-relevant.py`` start a crawl where reward is given by a
   classifier that returns a score with ``.predict_proba`` method.
 
+There is also an extraction spider
+``deepdeep.spiders.extraction.ExtractionSpider`` that learns to extract unique
+items from a single domain given an item extractor.
+
 For keywords and relevancy crawlers, the following files will be created
 in the result folder:
 
