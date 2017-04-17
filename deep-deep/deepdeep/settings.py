@@ -45,7 +45,7 @@ AUTOTHROTTLE_START_DELAY = 0.5
 AUTOTHROTTLE_MAX_DELAY = 5
 AUTOTHROTTLE_TARGET_CONCURRENCY = 2.0
 
-# Disable cookies for broad crawl (enabled by default)
+# Disable cookies for broad crawl. Enable if using autologin.
 COOKIES_ENABLED = False
 
 MEMUSAGE_ENABLED = True
