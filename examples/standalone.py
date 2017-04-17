@@ -24,7 +24,7 @@ class Spider(scrapy.Spider):
                'priority': response.request.priority}
         for score, url in self.link_clf.extract_urls_from_response(response):
             # To use default scrapy queue, we need to make priority
-            # a low-cardinality # integer. Typical score range is 0 .. 1.2,
+            # a low-cardinality integer. Typical score range is 0 .. 1.2,
             # so we'll have about 20 different "levels" of requests.
             priority = int(score * 20)
             yield scrapy.Request(url, priority=priority)
