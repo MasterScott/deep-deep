@@ -42,6 +42,28 @@ in the result folder:
   command.
 
 
+Using trained model
+-------------------
+
+You can use deep-deep to just run adaptive crawls, updating link model and
+collecting crawled data at the same time. But in some cases it is more
+efficient to first train a link model with deep-deep, and then use this model
+in another crawler. Deep-deep uses a lot
+of memory to store page and link features, and more CPU to update the link
+model. So if the link model is general enough to freeze it, you can run
+a more efficient crawl. Or you might want to just use deep-deep link model
+in an existing project.
+
+This is all possible with ``deepdeep.predictor.LinkClassifier``: just load
+it from ``Q-*.joblib`` checkpoint and use ``.extract_urls_from_response``
+or ``.extract_urls`` methods to get a list of urls with scores.
+An example of using this classifier in a simple scrapy spider is given in
+``examples/standalone.py``. Note that in order to use default scrapy
+queue, a float link score is converted to an integer priority value.
+
+Note that in some rare cases the model might fail to generalize from
+the crawl it was trained on to the new crawl.
+
 Testing
 -------
 
