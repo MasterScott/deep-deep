@@ -8,15 +8,13 @@ branches:
 matrix:
   include:
     - python: 3.5
+      env: TOXENV=py35
 
 
 install:
     - pip install -U pip tox codecov
 
-script:
-    - pip install -r requirements.txt
-    - pip install -e deep-deep
-    - py.test --doctest-modules deep-deep/deepdeep
+script: cd deep-deep && tox
 
 after_success:
     - codecov
