@@ -1,14 +1,13 @@
 import importlib
 import traceback
-from typing import Any, Callable, Iterable, Optional, Set, Tuple
+from typing import Any, Callable, Iterable, Set, Tuple
 from weakref import WeakKeyDictionary
 
 import autopager  # type: ignore
 from scrapy import Request  # type: ignore
-from scrapy.dupefilters import RFPDupeFilter  # type: ignore
 from scrapy.http.response.text import TextResponse  # type: ignore
 
-from .qspider import QSpider
+from .single_domain import SingleDomainSpider
 from deepdeep.goals import BaseGoal
 
 
@@ -65,7 +64,7 @@ class ExtractionGoal(BaseGoal):
         pass
 
 
-class ExtractionSpider(QSpider):
+class ExtractionSpider(SingleDomainSpider):
     """
     This spider learns how to extract data from a single domain.
     It uses ExtractionGoal goal (extracting maximum number of unique items using
@@ -83,61 +82,23 @@ class ExtractionSpider(QSpider):
         with 3 fields: 'url' is the response url,
         'key' is the key returned by the extractor function, and item is item
         returned by the extractor function.
-    seed_url : str
-        Set this argument in order to start crawling from a single seed URL
-        specified from the command line (if you need multiple seeds,
-        specify a path to a file with them via seeds_url).
-    n_copies : int
-        Number of spider "copies" run at the same time (1 by default).
-        This copies have independed request queues and cookies, but share
-        the same model. This option makes sense when your goal is to train
-        a model tha will later be used elsewhere: running several copies reduces
-        the chance that the model will learn features that change from run
-        to run (e.g. session ids in URLs or depending on a particular order of
-        traversal), so the model should be more general.
 
-    It also accepts all arguments accepted by QSpider and BaseSpider.
-
-    Many arguments have different default values because this spider
-    crawls a single domain instead of multiple domains assumed for QSpider,
-    and to make memory consumption more predictable to make it more practical
-    to run this spider for item extraction (as opposed to model training).
-    Current default configuration will require about 3-6 GB of memory
-    for a typical large website.
+    It also accepts all arguments accepted by QSpider, SingleDomainSpider
+    and BaseSpider.
     """
     name = 'extraction'
-    use_urls = True
-    use_link_text = 1
-    use_page_urls = 1
-    use_same_domain = 0  # not supported by eli5 yet, and we don't need it
-    clf_penalty = 'l1'
-    clf_alpha = 0.0001
-    balancing_temperature = 5.0  # high to make all simultaneous runs equal
     export_items = 1
     export_cdr = 0
-    seed_url = None  # type: Optional[str]
-    replay_sample_size = 50
-    replay_maxsize = 5000  # single site needs lower replay
-    replay_maxlinks = 500000  # some sites can have lots of links per page
-    domain_queue_maxsize = 500000
-    # number of simultaneous runs
-    n_copies = 1
 
-    _ARGS = {'extractor', 'n_copies', 'seed_url', 'export_items'} | QSpider._ARGS
-    ALLOWED_ARGUMENTS = _ARGS | QSpider.ALLOWED_ARGUMENTS
-
-    custom_settings = dict(
-        DUPEFILTER_CLASS='deepdeep.spiders.extraction.RunAwareDupeFilter',
-        **QSpider.custom_settings)
+    _ARGS = ({'extractor', 'export_items'} | SingleDomainSpider._ARGS)
+    ALLOWED_ARGUMENTS = _ARGS | SingleDomainSpider.ALLOWED_ARGUMENTS
 
     def __init__(self, *args, **kwargs):
         """ extractor argument has a "module:function" format
         and specifies where to load the extractor from.
         """
         super().__init__(*args, **kwargs)
-        self.n_copies = int(self.n_copies)
         self.extractor = str(self.extractor)
-        self.seed_url = self.seed_url
         self.export_items = bool(int(self.export_items))
         self.exported_keys = set()
         self.export_buffer = []
@@ -168,30 +129,6 @@ class ExtractionSpider(QSpider):
                     yield item_or_link
         else:
             yield from parse_result
-
-    def start_requests(self):
-        if self.seeds_url is None:
-            if self.seed_url is None:
-                raise ValueError('Pass seeds_url or seed_url')
-            yield from self._start_requests([self.seed_url])
-        else:
-            yield from super().start_requests()
-
-    # Allow running several simultaneous independent spiders on the same domain
-    # which still share the model, so it is more general.
-
-    def _start_requests(self, urls):
-        for orig_req in super()._start_requests(urls):
-            for idx in range(self.n_copies):
-                req = orig_req.copy()
-                set_run_id(req, 'run-{}'.format(idx))
-                yield req
-
-    def _links_to_requests(self, response, *args, **kwargs):
-        run_id = response.request.meta['run_id']
-        for req in super()._links_to_requests(response, *args, **kwargs):
-            set_run_id(req, run_id)
-            yield req
 
 
 class AutopagerBaseline(ExtractionSpider):
@@ -224,14 +161,3 @@ class AutopagerBaseline(ExtractionSpider):
             req.meta['is_pagination'] = is_pagination
             req.priority = -100 * req.meta['depth']
             yield req
-
-
-def set_run_id(request: Request, run_id: str):
-    for key in ['run_id', 'cookiejar', 'scheduler_slot']:
-        request.meta[key] = run_id
-
-
-class RunAwareDupeFilter(RFPDupeFilter):
-    def request_fingerprint(self, request):
-        fp = super().request_fingerprint(request)
-        return '{}-{}'.format(request.meta.get('run_id'), fp)
