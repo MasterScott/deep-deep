@@ -56,7 +56,8 @@ class SingleDomainSpider(QSpider, metaclass=abc.ABCMeta):
     ALLOWED_ARGUMENTS = _ARGS | QSpider.ALLOWED_ARGUMENTS
 
     custom_settings = dict(
-        DUPEFILTER_CLASS='deepdeep.spiders.qspider.RunAwareDupeFilter',
+        DUPEFILTER_CLASS='deepdeep.spiders.single_domain.RunAwareDupeFilter',
+        CONCURRENT_REQUESTS=4,
         **QSpider.custom_settings)
 
     def __init__(self, *args, **kwargs):
