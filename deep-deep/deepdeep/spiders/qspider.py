@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
-from typing import Dict, Tuple, Union, Optional, List, Iterator, Set
+from typing import Any, Dict, Tuple, Union, Optional, List, Iterator, Set
 import abc
 import time
 import gzip
@@ -61,7 +61,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     custom_settings = {
         # 'DEPTH_LIMIT': 100,
         'DEPTH_PRIORITY': 1,
-    }
+    }  # type: Dict[str, Any]
     initial_priority = score_to_priority(5)
 
     # whether to export page data as CDR items
@@ -196,7 +196,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             self.page_vectorizer = PageVectorizer() if self.use_pages else None
 
         self.total_reward = 0
-        self.rewards = []
+        self.rewards = []  # type: List[float]
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()
 

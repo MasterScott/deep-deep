@@ -73,6 +73,7 @@ with all features joined. It requires ~2x RAM because multiple
 10x faster.
 """
 from __future__ import absolute_import
+from collections.abc import Sized
 import random
 from typing import Callable, List, Tuple, Any, Optional
 
@@ -376,7 +377,7 @@ class QLearner:
         return dct
 
 
-class ExperienceMemory:
+class ExperienceMemory(Sized):
     """
     Experience replay memory.
 

@@ -36,7 +36,7 @@ class ExtractionGoal(BaseGoal):
             for each extracted item.
         """
         self.extractor = extractor
-        self.extracted_items = set()
+        self.extracted_items = set()  # type: Set[Tuple[str, str]]
         self.request_reward = -request_penalty
         self.item_reward = 1.0
         self.item_callback = item_callback
@@ -115,7 +115,7 @@ class ExtractionSpider(QSpider):
     balancing_temperature = 5.0  # high to make all simultaneous runs equal
     export_items = 1
     export_cdr = 0
-    seed_url = None
+    seed_url = None  # type: Optional[str]
     replay_sample_size = 50
     replay_maxsize = 5000  # single site needs lower replay
     replay_maxlinks = 500000  # some sites can have lots of links per page

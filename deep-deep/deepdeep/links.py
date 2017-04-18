@@ -32,11 +32,20 @@ def extract_js_link(href: str) -> Optional[str]:
     m = _js_link_search(href)
     if m:
         return m.group('url')
+    return None
 
 
 def extract_link_dicts(
-        selector: Selector, base_url: str, only_urls: bool=False)\
-        -> Union[Iterator[Dict], Iterator[str]]:
+        selector: Selector, base_url: str) -> Iterator[Dict]:
+    return _extract_link_dicts(selector, base_url)
+
+
+def extract_links(selector: Selector, base_url: str) -> Iterator[str]:
+    return _extract_link_dicts(selector, base_url, only_urls=True)
+
+
+def _extract_link_dicts(
+        selector: Selector, base_url: str, only_urls: bool=False):
     """
     Extract dicts with link information::
 
