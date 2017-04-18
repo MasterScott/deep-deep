@@ -9,14 +9,16 @@ import json
 import gzip
 import zlib
 
-import numpy as np
-import parsel
-import lxml.html
-from scipy.sparse.csr import csr_matrix
-import tldextract
-from lxml import etree  # type: ignore
+import numpy as np  # type: ignore
+import parsel  # type: ignore
+import lxml.html  # type: ignore
+from scipy.sparse.csr import csr_matrix  # type: ignore
+import tldextract  # type: ignore
+from lxml import etree
+from lxml.etree import ParserError  # type: ignore
+from lxml.html import HTMLParser, fromstring, HtmlElement
 from lxml.html.clean import Cleaner  # type: ignore
-from scrapy.utils.url import canonicalize_url as _canonicalize_url
+from scrapy.utils.url import canonicalize_url as _canonicalize_url  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -166,9 +168,9 @@ _clean_html = Cleaner(
 ).clean_html
 
 
-def _cleaned_html_tree(html: str) -> lxml.html.HtmlElement:
-    parser = lxml.html.HTMLParser(encoding='utf8')
-    tree = lxml.html.fromstring(html.encode('utf8'), parser=parser)
+def _cleaned_html_tree(html: str) -> HtmlElement:
+    parser = HTMLParser(encoding='utf8')
+    tree = fromstring(html.encode('utf8'), parser=parser)
     return _clean_html(tree)
 
 
@@ -195,7 +197,7 @@ def html2text(html: str) -> str:
     try:
         tree = _cleaned_html_tree(html)
         sel = parsel.Selector(root=tree, type='html')
-    except (etree.XMLSyntaxError, etree.ParseError, etree.ParserError):
+    except (etree.XMLSyntaxError, etree.ParseError, ParserError):
         # likely plain text
         sel = parsel.Selector(html)
     return _selector_to_text(sel)

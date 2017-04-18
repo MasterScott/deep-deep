@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
-from typing import Dict, Tuple, Union, Optional, List, Iterator, Set
+from typing import Any, Dict, Tuple, Union, Optional, List, Iterator, Set
 import abc
 import time
 import gzip
 import logging
 
-import psutil
-import tqdm
-import joblib
-import numpy as np
-import scipy.sparse as sp
-import networkx as nx
-import scrapy
-from scrapy.http import TextResponse, Response
-from scrapy.statscollectors import StatsCollector
-from scrapy_cdr.utils import text_cdr_item
-import tensorboard_logger
+import psutil  # type: ignore
+import tqdm  # type: ignore
+import joblib  # type: ignore
+import numpy as np  # type: ignore
+import scipy.sparse as sp  # type: ignore
+import networkx as nx  # type: ignore
+import scrapy  # type: ignore
+from scrapy.http import TextResponse, Response  # type: ignore
+from scrapy.statscollectors import StatsCollector  # type: ignore
+from scrapy_cdr.utils import text_cdr_item  # type: ignore
+import tensorboard_logger  # type: ignore
 
 from deepdeep.queues import (
     BalancedPriorityQueue,
@@ -61,7 +61,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     custom_settings = {
         # 'DEPTH_LIMIT': 100,
         'DEPTH_PRIORITY': 1,
-    }
+    }  # type: Dict[str, Any]
     initial_priority = score_to_priority(5)
 
     # whether to export page data as CDR items
@@ -196,7 +196,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             self.page_vectorizer = PageVectorizer() if self.use_pages else None
 
         self.total_reward = 0
-        self.rewards = []
+        self.rewards = []  # type: List[float]
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()
 

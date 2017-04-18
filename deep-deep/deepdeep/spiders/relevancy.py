@@ -3,10 +3,10 @@ from __future__ import absolute_import
 import abc
 from pathlib import Path
 import pickle
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-import joblib
-from scrapy.http import Response, TextResponse
+import joblib  # type: ignore
+from scrapy.http import Response, TextResponse  # type: ignore
 
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal
@@ -48,7 +48,7 @@ class _RelevancySpider(QSpider, metaclass=abc.ABCMeta):
         'DOWNLOADER_MIDDLEWARES': {
            'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': None,
         },
-    }
+    }  # type: Dict[str, Any]
 
     @abc.abstractmethod
     def relevancy(self, response: Response) -> float:
