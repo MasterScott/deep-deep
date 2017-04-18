@@ -7,17 +7,17 @@ import time
 import gzip
 import logging
 
-import psutil
-import tqdm
-import joblib
-import numpy as np
-import scipy.sparse as sp
-import networkx as nx
-import scrapy
-from scrapy.http import TextResponse, Response
-from scrapy.statscollectors import StatsCollector
-from scrapy_cdr.utils import text_cdr_item
-import tensorboard_logger
+import psutil  # type: ignore
+import tqdm  # type: ignore
+import joblib  # type: ignore
+import numpy as np  # type: ignore
+import scipy.sparse as sp  # type: ignore
+import networkx as nx  # type: ignore
+import scrapy  # type: ignore
+from scrapy.http import TextResponse, Response  # type: ignore
+from scrapy.statscollectors import StatsCollector  # type: ignore
+from scrapy_cdr.utils import text_cdr_item  # type: ignore
+import tensorboard_logger  # type: ignore
 
 from deepdeep.queues import (
     BalancedPriorityQueue,

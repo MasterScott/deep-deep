@@ -5,8 +5,8 @@ from pathlib import Path
 import pickle
 from typing import List, Optional
 
-import joblib
-from scrapy.http import Response, TextResponse
+import joblib  # type: ignore
+from scrapy.http import Response, TextResponse  # type: ignore
 
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal

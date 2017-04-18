@@ -3,11 +3,11 @@ import re
 from urllib.parse import urljoin
 from typing import Iterator, Dict, Optional, Set, Iterable, Union, Tuple
 
-from parsel import Selector
-from scrapy.http import TextResponse
-from scrapy.linkextractors import IGNORED_EXTENSIONS
-from scrapy.utils.response import get_base_url
-from scrapy.utils.url import url_has_any_extension
+from parsel import Selector  # type: ignore
+from scrapy.http import TextResponse  # type: ignore
+from scrapy.linkextractors import IGNORED_EXTENSIONS  # type: ignore
+from scrapy.utils.response import get_base_url  # type: ignore
+from scrapy.utils.url import url_has_any_extension  # type: ignore
 
 from deepdeep.utils import canonicalize_url, get_domain
 

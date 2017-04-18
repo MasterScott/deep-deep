@@ -3,12 +3,12 @@ from __future__ import absolute_import
 from itertools import chain
 from typing import Dict
 
-import numpy as np
-from sklearn.decomposition import LatentDirichletAllocation
-from sklearn.feature_extraction.text import HashingVectorizer, CountVectorizer
-from sklearn.pipeline import make_union, make_pipeline
-from sklearn.preprocessing import FunctionTransformer, Normalizer
-from formasaurus.text import normalize
+import numpy as np  # type: ignore
+from sklearn.decomposition import LatentDirichletAllocation  # type: ignore
+from sklearn.feature_extraction.text import HashingVectorizer, CountVectorizer  # type: ignore
+from sklearn.pipeline import make_union, make_pipeline  # type: ignore
+from sklearn.preprocessing import FunctionTransformer, Normalizer  # type: ignore
+from formasaurus.text import normalize  # type: ignore
 
 from deepdeep.utils import url_path_query, html2text, canonicalize_url
 
@@ -108,7 +108,7 @@ def LDAPageVctorizer(n_topics: int, batch_size: int, min_df: int, verbose=1,
 
 
 def _get_stop_words():
-    import stop_words
+    import stop_words  # type: ignore
 
     return set(chain.from_iterable(
         stop_words.get_stop_words(lang)

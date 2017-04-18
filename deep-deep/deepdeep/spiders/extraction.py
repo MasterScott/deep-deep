@@ -1,12 +1,12 @@
 import importlib
 import traceback
-from typing import Any, Callable, Iterable, Tuple
+from typing import Any, Callable, Iterable, Optional, Set, Tuple
 from weakref import WeakKeyDictionary
 
-import autopager
-from scrapy import Request
-from scrapy.dupefilters import RFPDupeFilter
-from scrapy.http.response.text import TextResponse
+import autopager  # type: ignore
+from scrapy import Request  # type: ignore
+from scrapy.dupefilters import RFPDupeFilter  # type: ignore
+from scrapy.http.response.text import TextResponse  # type: ignore
 
 from .qspider import QSpider
 from deepdeep.goals import BaseGoal
