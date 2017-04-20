@@ -7,7 +7,7 @@ import pybloom_live  # type: ignore
 from scrapy.http.response.text import TextResponse  # type: ignore
 
 from deepdeep.goals import BaseGoal
-from .single_domain import SingleDomainSpider
+from .single_domain import SingleDomainSpider, AutopagerBaseline
 
 
 class UniqueContentGoal(BaseGoal):
@@ -60,3 +60,7 @@ class UniqueContentSpider(SingleDomainSpider):
 
     def get_goal(self):
         return UniqueContentGoal()
+
+
+class UniqueAutopagerBaseline(SingleDomainSpider, AutopagerBaseline):
+    name = 'unique_autopager'

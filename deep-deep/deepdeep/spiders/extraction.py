@@ -3,11 +3,10 @@ import traceback
 from typing import Any, Callable, Iterable, Set, Tuple
 from weakref import WeakKeyDictionary
 
-import autopager  # type: ignore
 from scrapy import Request  # type: ignore
 from scrapy.http.response.text import TextResponse  # type: ignore
 
-from .single_domain import SingleDomainSpider
+from .single_domain import SingleDomainSpider, AutopagerBaseline
 from deepdeep.goals import BaseGoal
 
 
@@ -131,33 +130,5 @@ class ExtractionSpider(SingleDomainSpider):
             yield from parse_result
 
 
-class AutopagerBaseline(ExtractionSpider):
-    """ A BFS + autopager baseline. This spider crawles in breadth-first order,
-    but does not increase depth for pagination links. Used only as a baseline
-    to compare ExtractionSpider against.
-    """
+class AutopagerExtractionBaseline(ExtractionSpider, AutopagerBaseline):
     name = 'autopager_extraction'
-    baseline = True
-    eps = 0.0  # do not select requests at random
-    # disable depth middleware to avoid increasing depth for pagination urls
-    custom_settings = dict(ExtractionSpider.custom_settings)
-    custom_settings['SPIDER_MIDDLEWARES'] = dict(
-        custom_settings.get('SPIDER_MIDDLEWARES', {}))
-    custom_settings['SPIDER_MIDDLEWARES'][
-        'scrapy.spidermiddlewares.depth.DepthMiddleware'] = None
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.autopager = autopager.AutoPager()
-
-    def _links_to_requests(self, response, *args, **kwargs):
-        pagination_urls = set(self.autopager.urls(response))
-        depth = response.meta.get('depth', 1)
-        real_depth = response.meta.get('real_depth', 1)
-        for req in super()._links_to_requests(response, *args, **kwargs):
-            is_pagination = req.url in pagination_urls
-            req.meta['depth'] = depth + (1 - is_pagination)
-            req.meta['real_depth'] = real_depth + 1
-            req.meta['is_pagination'] = is_pagination
-            req.priority = -100 * req.meta['depth']
-            yield req
