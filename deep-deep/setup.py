@@ -33,5 +33,6 @@ setup(
         'numpy',
         'scrapy-cdr',
         'formasaurus[with_deps]',  # fixme: remove it
+        'proxy-middleware',
     ],
 )

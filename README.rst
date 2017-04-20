@@ -41,6 +41,13 @@ in the result folder:
   TensorFlow_ to view it with ``tensorboard --logdir <result folder parent>``
   command.
 
+Most options are set via spider arguments, please see docstrings
+for corresponding spiders.
+
+Non-standard settings::
+
+- ``HTTP_PROXY``, ``HTTPS_PROXY``: set http and https proxies.
+
 
 Using trained model
 -------------------
