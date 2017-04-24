@@ -62,5 +62,5 @@ class UniqueContentSpider(SingleDomainSpider):
         return UniqueContentGoal()
 
 
-class UniqueAutopagerBaseline(SingleDomainSpider, AutopagerBaseline):
+class UniqueAutopagerBaseline(AutopagerBaseline, SingleDomainSpider):
     name = 'unique_autopager'
