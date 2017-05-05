@@ -45,7 +45,7 @@ def tokenize(text: str) -> List[str]:
 
 def ngrams(tokens: List[str], n: int) -> Iterable[List[str]]:
     """ All ngrams from 1 to n.
-    
+
     >>> list(ngrams('abcd', 3))
     ['a', 'ab', 'abc', 'b', 'bc', 'bcd', 'c', 'cd', 'd']
     """
