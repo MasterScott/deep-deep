@@ -4,9 +4,9 @@ import random
 import logging
 from typing import Optional
 
-import scrapy
-from scrapy.exceptions import CloseSpider
-from scrapy.utils.url import guess_scheme, add_http_if_no_scheme
+import scrapy  # type: ignore
+from scrapy.exceptions import CloseSpider  # type: ignore
+from scrapy.utils.url import guess_scheme, add_http_if_no_scheme  # type: ignore
 
 from deepdeep.links import DictLinkExtractor
 from deepdeep.downloadermiddlewares import offdomain_request_dropped

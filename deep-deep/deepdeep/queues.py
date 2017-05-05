@@ -26,8 +26,9 @@ from typing import (
     Sized,
 )
 
-import numpy as np
-import scrapy
+import numpy as np  # type: ignore
+import scrapy  # type: ignore
+
 from deepdeep.utils import softmax, log_time, csr_nbytes
 
 

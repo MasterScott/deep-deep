@@ -2,7 +2,7 @@
 import logging
 
 from scrapy.downloadermiddlewares.httpproxy import HttpProxyMiddleware
-from scrapy.exceptions import IgnoreRequest, NotConfigured
+from scrapy.exceptions import IgnoreRequest, NotConfigured  # type: ignore
 
 from deepdeep.utils import get_domain
 

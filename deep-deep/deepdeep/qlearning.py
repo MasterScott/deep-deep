@@ -73,13 +73,14 @@ with all features joined. It requires ~2x RAM because multiple
 10x faster.
 """
 from __future__ import absolute_import
+from collections.abc import Sized
 import random
 from typing import Callable, List, Tuple, Any, Optional
 
-import numpy as np
-from scipy import sparse
-import sklearn.base
-from sklearn.linear_model import SGDRegressor
+import numpy as np  # type: ignore
+from scipy import sparse  # type: ignore
+import sklearn.base  # type: ignore
+from sklearn.linear_model import SGDRegressor  # type: ignore
 
 from deepdeep.utils import log_time, csr_nbytes
 
@@ -376,7 +377,7 @@ class QLearner:
         return dct
 
 
-class ExperienceMemory:
+class ExperienceMemory(Sized):
     """
     Experience replay memory.
 
