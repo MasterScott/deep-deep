@@ -265,16 +265,17 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         stats['eps-policy'] = response.request.meta.get('from_random_policy', None)
 
         if self.export_cdr:
-            cdr_item = text_cdr_item(
-                response,
-                crawler_name='deep-deep',
-                team_name='HG',
-                metadata={
-                    'depth': response.meta.get('depth'),
-                    'stats': stats
-                }
-            )
-            yield cdr_item
+            if hasattr(response, 'text'):
+                cdr_item = text_cdr_item(
+                    response,
+                    crawler_name='deep-deep',
+                    team_name='HG',
+                    metadata={
+                        'depth': response.meta.get('depth'),
+                        'stats': stats
+                    }
+                )
+                yield cdr_item
         else:
             yield stats
 

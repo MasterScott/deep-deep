@@ -32,6 +32,7 @@ setup(
         'joblib',
         'numpy',
         'scrapy-cdr',
+        'autologin-middleware',
         'formasaurus[with_deps]',  # fixme: remove it
         'proxy-middleware',
     ],

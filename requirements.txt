@@ -6,6 +6,7 @@ psutil
 numpy
 formasaurus[with_deps]
 scrapy-cdr
+autologin-middleware
 tldextract
 stop-words
 docopt
