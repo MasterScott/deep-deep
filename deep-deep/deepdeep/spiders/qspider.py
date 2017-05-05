@@ -6,6 +6,7 @@ import abc
 import time
 import gzip
 import logging
+from weakref import WeakKeyDictionary
 
 import psutil  # type: ignore
 import tqdm  # type: ignore
@@ -199,6 +200,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.rewards = []  # type: List[float]
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()
+        self._reward_cache = WeakKeyDictionary()  # type: WeakKeyDictionary
 
         self.crawled_domains = set()  # type: Set[str]
         self.relevant_domains = set()  # type: Set[str]
@@ -229,6 +231,12 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     def get_goal(self) -> BaseGoal:
         """ This method should return a crawl goal object """
         pass
+
+    def get_reward(self, response: Response) -> float:
+        if response not in self._reward_cache:
+            score = self.goal.get_reward(response)
+            self._reward_cache[response] = score
+        return self._reward_cache[response]
 
     def is_seed(self, r: Union[scrapy.Request, Response]) -> bool:
         return 'link_vector' not in r.meta
@@ -307,7 +315,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
         reward = 0
         if not self.is_seed(response):
-            reward = self.goal.get_reward(response)
+            reward = self.goal.get_reward_cached(response)
             self.update_node(response, {'reward': reward})
             self.total_reward += reward
             self.rewards.append(reward)
@@ -316,7 +324,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 AS_t1=links_matrix,
                 r_t1=reward
             )
-            self.goal.response_observed(response)
         domain = get_domain(response.url)
         self.crawled_domains.add(domain)
         if reward > 0.5:

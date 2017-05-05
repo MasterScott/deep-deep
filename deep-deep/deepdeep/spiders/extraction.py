@@ -40,29 +40,23 @@ class ExtractionGoal(BaseGoal):
         self.request_reward = -request_penalty
         self.item_reward = 1.0
         self.item_callback = item_callback
-        self._cache = WeakKeyDictionary()  # type: WeakKeyDictionary
 
     def get_reward(self, response: TextResponse) -> float:
-        if response not in self._cache:
-            score = self.request_reward
-            run_id = response.meta['run_id']
-            try:
-                items = list(self.extractor(response))
-            except Exception:
-                traceback.print_exc()
-            else:
-                for key, item in items:
-                    full_key = (run_id, key)
-                    if full_key not in self.extracted_items:
-                        self.extracted_items.add(full_key)
-                        score += self.item_reward
-                    if self.item_callback:
-                        self.item_callback(response.url, key, item)
-            self._cache[response] = score
-        return self._cache[response]
-
-    def response_observed(self, response: TextResponse):
-        pass
+        score = self.request_reward
+        run_id = response.meta['run_id']
+        try:
+            items = list(self.extractor(response))
+        except Exception:
+            traceback.print_exc()
+        else:
+            for key, item in items:
+                full_key = (run_id, key)
+                if full_key not in self.extracted_items:
+                    self.extracted_items.add(full_key)
+                    score += self.item_reward
+                if self.item_callback:
+                    self.item_callback(response.url, key, item)
+        return score
 
 
 class ExtractionSpider(QSpider):

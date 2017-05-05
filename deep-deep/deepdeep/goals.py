@@ -8,7 +8,6 @@ Crawl objective (goal) classes define how is reward computed.
 from __future__ import absolute_import
 import abc
 from typing import Callable
-from weakref import WeakKeyDictionary
 from collections import defaultdict
 import logging
 
@@ -23,22 +22,9 @@ class BaseGoal(metaclass=abc.ABCMeta):
     """
     Abstract base class for crawling objectives.
     """
-
     @abc.abstractmethod
     def get_reward(self, response: Response) -> float:
-        """
-        Return a reward for a response.
-        This method may be called several times; it shouldn't update
-        internal goal state. Implement :meth:`response_observed` method
-        to update internal goal state.
-        """
-        pass
-
-    @abc.abstractmethod
-    def response_observed(self, response: TextResponse) -> None:
-        """
-        Update internal state with the received response.
-        This method is called after all :meth:`get_reward` calls.
+        """ Return a reward for a response.
         """
         pass
 
@@ -114,13 +100,12 @@ class RelevancyGoal(BaseGoal):
         self.relevant_pages_found = defaultdict(int)  # type: defaultdict
 
     def get_reward(self, response: Response) -> float:
-        return self.relevancy(response)
-
-    def response_observed(self, response: TextResponse) -> None:
+        relevancy = self.relevancy(response)
         domain = get_response_domain(response)
         self.request_count[domain] += 1
-        if self.relevancy(response) >= self.relevancy_threshold:
+        if relevancy >= self.relevancy_threshold:
             self.relevant_pages_found[domain] += 1
+        return relevancy
 
     def is_acheived_for(self, domain: str):
         return (
@@ -172,24 +157,18 @@ class FormasaurusGoal(BaseGoal):
     def __init__(self, formtype: str, threshold: float=0.7) -> None:
         self.formtype = formtype
         self.threshold = threshold
-        self._cache = WeakKeyDictionary()  # type: WeakKeyDictionary
         self._domain_scores = MaxScores()  # domain -> max score
 
     def get_reward(self, response: TextResponse) -> float:
-        if response not in self._cache:
-            if hasattr(response, 'text'):
-                scores = response_max_scores(response)
-                score = scores.get(self.formtype, 0.0)
-                # score = score if score > 0.5 else 0
-            else:
-                score = 0.0
-            self._cache[response] = score
-        return self._cache[response]
-
-    def response_observed(self, response: TextResponse) -> None:
-        reward = self.get_reward(response)
+        if hasattr(response, 'text'):
+            scores = response_max_scores(response)
+            score = scores.get(self.formtype, 0.0)
+            # score = score if score > 0.5 else 0
+        else:
+            score = 0.0
         domain = get_response_domain(response)
-        self._domain_scores.update(domain, reward)
+        self._domain_scores.update(domain, score)
+        return score
 
     def is_acheived_for(self, domain: str) -> bool:
         score = self._domain_scores[domain]
