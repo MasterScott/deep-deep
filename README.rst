@@ -1,6 +1,15 @@
 Deep-Deep: Adaptive Crawler
 ===========================
 
+.. image:: https://travis-ci.org/TeamHG-Memex/deep-deep.svg?branch=master
+   :target: http://travis-ci.org/TeamHG-Memex/deep-deep
+   :alt: Build Status
+
+.. image:: http://codecov.io/github/TeamHG-Memex/deep-deep/coverage.svg?branch=master
+   :target: http://codecov.io/github/TeamHG-Memex/deep-deep?branch=master
+   :alt: Code Coverage
+
+
 Deep-Deep is a Scrapy-based crawler which uses Reinforcement Learning methods
 to learn which links to follow.
 
