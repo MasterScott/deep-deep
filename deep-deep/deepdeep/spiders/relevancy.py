@@ -7,10 +7,10 @@ from typing import Any, Dict, List, Optional
 
 import joblib  # type: ignore
 from scrapy.http import Response, TextResponse  # type: ignore
+import html_text  # type: ignore
 
 from .qspider import QSpider
 from deepdeep.goals import RelevancyGoal
-from deepdeep.utils import html2text
 
 
 class _RelevancySpider(QSpider, metaclass=abc.ABCMeta):
@@ -152,9 +152,12 @@ class ClassifierRelevancySpider(_RelevancySpider):
         if self.classifier_input == 'vector':
             x = self._page_vector(response)
         elif self.classifier_input == 'text':
-            x = html2text(response.text)
+            x = html_text.extract_text(response.text)
         elif self.classifier_input == 'text_url':
-            x = {'text': html2text(response.text), 'url': response.url}
+            x = {
+                'text': html_text.extract_text(response.text),
+                'url': response.url
+            }
         elif self.classifier_input == 'html':
             x = response.text
         else:

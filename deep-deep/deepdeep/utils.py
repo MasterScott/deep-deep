@@ -5,19 +5,10 @@ import itertools
 import functools
 import collections
 from urllib.parse import unquote_plus, urlsplit
-import json
-import gzip
-import zlib
 
 import numpy as np  # type: ignore
-import parsel  # type: ignore
-import lxml.html  # type: ignore
 from scipy.sparse.csr import csr_matrix  # type: ignore
 import tldextract  # type: ignore
-from lxml import etree
-from lxml.etree import ParserError  # type: ignore
-from lxml.html import HTMLParser, fromstring, HtmlElement
-from lxml.html.clean import Cleaner  # type: ignore
 from scrapy.utils.url import canonicalize_url as _canonicalize_url  # type: ignore
 
 
@@ -148,59 +139,6 @@ def log_time(func):
             end = time.time()
             logging.debug("{} took {:0.4f}s".format(func, end-start))
     return wrapper
-
-
-_clean_html = Cleaner(
-    scripts=True,
-    javascript=False,  # onclick attributes are fine
-    comments=True,
-    style=True,
-    links=True,
-    meta=True,
-    page_structure=False,  # <title> may be nice to have
-    processing_instructions=True,
-    embedded=True,
-    frames=True,
-    forms=False,  # keep forms
-    annoying_tags=False,
-    remove_unknown_tags=False,
-    safe_attrs_only=False,
-).clean_html
-
-
-def _cleaned_html_tree(html: str) -> HtmlElement:
-    parser = HTMLParser(encoding='utf8')
-    tree = fromstring(html.encode('utf8'), parser=parser)
-    return _clean_html(tree)
-
-
-def _selector_to_text(sel: parsel.Selector) -> str:
-    return sel.xpath('normalize-space()').extract_first('')
-
-
-def html2text(html: str) -> str:
-    """
-    Convert html to text.
-
-    >>> html = '<html><style>.div {}</style><body><p>Hello,   world!</body></html>'
-    >>> html2text(html)
-    'Hello, world!'
-
-    It works with XHTML declared ecodings:
-    >>> html = '<?xml version="1.0" encoding="utf-8" ?><html><style>.div {}</style><body>Hello,   world!</p></body></html>'
-    >>> html2text(html)
-    'Hello, world!'
-
-    >>> html2text("")
-    ''
-    """
-    try:
-        tree = _cleaned_html_tree(html)
-        sel = parsel.Selector(root=tree, type='html')
-    except (etree.XMLSyntaxError, etree.ParseError, ParserError):
-        # likely plain text
-        sel = parsel.Selector(html)
-    return _selector_to_text(sel)
 
 
 @functools.lru_cache(maxsize=100000)

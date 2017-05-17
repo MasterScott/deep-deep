@@ -9,8 +9,9 @@ from sklearn.feature_extraction.text import HashingVectorizer, CountVectorizer  
 from sklearn.pipeline import make_union, make_pipeline  # type: ignore
 from sklearn.preprocessing import FunctionTransformer, Normalizer  # type: ignore
 from formasaurus.text import normalize  # type: ignore
+import html_text  # type: ignore
 
-from deepdeep.utils import url_path_query, html2text, canonicalize_url
+from deepdeep.utils import url_path_query, canonicalize_url
 
 
 def LinkVectorizer(use_url: bool=False,
@@ -145,4 +146,4 @@ def _same_domain_feature(links):
 
 
 def _html_text_lower(html: str) -> str:
-    return html2text(html).lower()
+    return html_text.extract_text(html).lower()
