@@ -208,37 +208,6 @@ def canonicalize_url(url: str) -> str:
     return _canonicalize_url(url)
 
 
-def maybe_gzip_open(path, *args, **kwargs):
-    """
-    Open file with either open or gzip.open, depending on file extension.
-    """
-    if path.endswith(".gz"):
-        _open = gzip.open
-    else:
-        _open = open
-    return _open(path, *args, **kwargs)
-
-
-def iter_jsonlines(path):
-    """
-    Read .jl or .jl.gz file with JSON lines data,
-    return iterator with decoded lines.
-    If the .jl.gz archive is broken as much lines as possible are read from
-    the archive, and then an error is logged.
-    """
-    with maybe_gzip_open(str(path), 'rt', encoding='utf8') as f_in:
-        try:
-            for line in f_in:
-                try:
-                    yield json.loads(line)
-                except Exception as e:
-                    logging.warning("Error found: JSON line can't be decoded. %r" % e)
-                    break
-        except (EOFError, zlib.error):
-            logging.warning("Error found: tuncated archive.")
-            return
-
-
 def csr_nbytes(m: csr_matrix) -> int:
     if m is not None:
         return m.data.nbytes + m.indices.nbytes + m.indptr.nbytes

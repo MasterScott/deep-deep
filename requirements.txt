@@ -12,3 +12,4 @@ docopt
 tensorboard_logger>=0.0.3
 autopager>=0.2
 eli5>=0.6
+json-lines>=0.3.1

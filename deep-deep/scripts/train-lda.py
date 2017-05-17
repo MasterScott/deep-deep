@@ -17,13 +17,15 @@ sys.path.insert(0, str((Path(__file__).parent / "..").absolute()))
 from docopt import docopt
 import joblib
 from tqdm import tqdm
+import json_lines
 
 from deepdeep.vectorizers import LDAPageVctorizer
-from deepdeep.utils import iter_jsonlines
 
 
 def iter_html(path):
-    return (line['raw_content'] for line in iter_jsonlines(path))
+    with json_lines.open(path, broken=True) as lines:
+        for line in lines:
+            yield line['raw_content']
 
 
 def train(cdr_jlgz, n_topics=50, batch_size=1024, min_df=4, max_features=None):

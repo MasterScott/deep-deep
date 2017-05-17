@@ -18,12 +18,13 @@ import joblib
 from docopt import docopt
 from tqdm import tqdm
 from sklearn.pipeline import Pipeline
-
-from deepdeep.utils import iter_jsonlines
+import json_lines
 
 
 def iter_html(path):
-    return (line['raw_content'] for line in iter_jsonlines(path))
+    with json_lines.open(path, broken=True) as lines:
+        for line in lines:
+            yield line['raw_content']
 
 
 def print_top_words(model, feature_names, n_top_words, word_threshold=0.11):
