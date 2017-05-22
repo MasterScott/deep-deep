@@ -5,8 +5,9 @@ from typing import List
 import formasaurus  # type: ignore
 from formasaurus.text import tokenize, token_ngrams  # type: ignore
 from scrapy.http import Response  # type: ignore
+import html_text  # type: ignore
 
-from deepdeep.utils import dict_aggregate_max, html2text
+from deepdeep.utils import dict_aggregate_max
 
 
 # ========== form-based relevancy functions
@@ -68,7 +69,7 @@ def keyword_relevancy(response_html: str,
                       pos_keywords: List[str],
                       neg_keywords: List[str],
                       max_ngram=1):
-    text = html2text(response_html).lower()
+    text = html_text.extract_text(response_html).lower()
     return keyword_text_relevancy(text, pos_keywords, neg_keywords, max_ngram)
 
 

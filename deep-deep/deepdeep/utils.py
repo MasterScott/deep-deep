@@ -5,19 +5,10 @@ import itertools
 import functools
 import collections
 from urllib.parse import unquote_plus, urlsplit
-import json
-import gzip
-import zlib
 
 import numpy as np  # type: ignore
-import parsel  # type: ignore
-import lxml.html  # type: ignore
 from scipy.sparse.csr import csr_matrix  # type: ignore
 import tldextract  # type: ignore
-from lxml import etree
-from lxml.etree import ParserError  # type: ignore
-from lxml.html import HTMLParser, fromstring, HtmlElement
-from lxml.html.clean import Cleaner  # type: ignore
 from scrapy.utils.url import canonicalize_url as _canonicalize_url  # type: ignore
 
 
@@ -150,93 +141,9 @@ def log_time(func):
     return wrapper
 
 
-_clean_html = Cleaner(
-    scripts=True,
-    javascript=False,  # onclick attributes are fine
-    comments=True,
-    style=True,
-    links=True,
-    meta=True,
-    page_structure=False,  # <title> may be nice to have
-    processing_instructions=True,
-    embedded=True,
-    frames=True,
-    forms=False,  # keep forms
-    annoying_tags=False,
-    remove_unknown_tags=False,
-    safe_attrs_only=False,
-).clean_html
-
-
-def _cleaned_html_tree(html: str) -> HtmlElement:
-    parser = HTMLParser(encoding='utf8')
-    tree = fromstring(html.encode('utf8'), parser=parser)
-    return _clean_html(tree)
-
-
-def _selector_to_text(sel: parsel.Selector) -> str:
-    return sel.xpath('normalize-space()').extract_first('')
-
-
-def html2text(html: str) -> str:
-    """
-    Convert html to text.
-
-    >>> html = '<html><style>.div {}</style><body><p>Hello,   world!</body></html>'
-    >>> html2text(html)
-    'Hello, world!'
-
-    It works with XHTML declared ecodings:
-    >>> html = '<?xml version="1.0" encoding="utf-8" ?><html><style>.div {}</style><body>Hello,   world!</p></body></html>'
-    >>> html2text(html)
-    'Hello, world!'
-
-    >>> html2text("")
-    ''
-    """
-    try:
-        tree = _cleaned_html_tree(html)
-        sel = parsel.Selector(root=tree, type='html')
-    except (etree.XMLSyntaxError, etree.ParseError, ParserError):
-        # likely plain text
-        sel = parsel.Selector(html)
-    return _selector_to_text(sel)
-
-
 @functools.lru_cache(maxsize=100000)
 def canonicalize_url(url: str) -> str:
     return _canonicalize_url(url)
-
-
-def maybe_gzip_open(path, *args, **kwargs):
-    """
-    Open file with either open or gzip.open, depending on file extension.
-    """
-    if path.endswith(".gz"):
-        _open = gzip.open
-    else:
-        _open = open
-    return _open(path, *args, **kwargs)
-
-
-def iter_jsonlines(path):
-    """
-    Read .jl or .jl.gz file with JSON lines data,
-    return iterator with decoded lines.
-    If the .jl.gz archive is broken as much lines as possible are read from
-    the archive, and then an error is logged.
-    """
-    with maybe_gzip_open(str(path), 'rt', encoding='utf8') as f_in:
-        try:
-            for line in f_in:
-                try:
-                    yield json.loads(line)
-                except Exception as e:
-                    logging.warning("Error found: JSON line can't be decoded. %r" % e)
-                    break
-        except (EOFError, zlib.error):
-            logging.warning("Error found: tuncated archive.")
-            return
 
 
 def csr_nbytes(m: csr_matrix) -> int:
