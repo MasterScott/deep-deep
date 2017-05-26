@@ -13,6 +13,7 @@ docopt
 tensorboard_logger>=0.0.3
 autopager>=0.2
 eli5>=0.6
-html_text
 pybloom-live
 proxy-middleware
+json-lines==0.3.1
+html-text==0.1.1

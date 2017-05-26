@@ -17,3 +17,4 @@ docs/_build
 *.prof
 deep-deep/checkpoints/
 deep-deep/deepdeep/checkpoints/
+.mypy_cache
