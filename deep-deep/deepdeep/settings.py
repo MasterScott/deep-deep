@@ -93,6 +93,9 @@ DOWNLOADER_MIDDLEWARES = {
    'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': 543,
 }
 
+# Enable 'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware'
+OFFSITE_ENABLED = True
+
 # Enable or disable extensions
 # See http://scrapy.readthedocs.org/en/latest/topics/extensions.html
 EXTENSIONS = {

@@ -39,16 +39,10 @@ class _RelevancySpider(QSpider, metaclass=abc.ABCMeta):
     max_requests_per_domain = None  # type: Optional[int]
     max_relevant_pages_per_domain = None  # type: Optional[int]
 
-    custom_settings = {
-        # copied from QSpider
-        # 'DEPTH_LIMIT': 100,
-        'DEPTH_PRIORITY': 1,
-
-        # disable OffsiteDownloaderMiddleware
-        'DOWNLOADER_MIDDLEWARES': {
-           'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': None,
-        },
-    }  # type: Dict[str, Any]
+    custom_settings = dict(
+        QSpider.custom_settings,
+        OFFSITE_ENABLED=False,
+    )
 
     @abc.abstractmethod
     def relevancy(self, response: Response) -> float:

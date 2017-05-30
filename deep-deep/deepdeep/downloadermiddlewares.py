@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 
-from scrapy.exceptions import IgnoreRequest  # type: ignore
+from scrapy.exceptions import NotConfigured, IgnoreRequest  # type: ignore
 
 from deepdeep.utils import get_domain
 
@@ -33,4 +33,6 @@ class OffsiteDownloaderMiddleware:
 
     @classmethod
     def from_crawler(cls, crawler):
+        if not crawler.settings.getbool('OFFSITE_ENABLED'):
+            raise NotConfigured
         return cls(crawler.signals)
