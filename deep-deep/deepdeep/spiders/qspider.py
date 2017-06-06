@@ -315,7 +315,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
         reward = 0
         if not self.is_seed(response):
-            reward = self.goal.get_reward_cached(response)
+            reward = self.goal.get_reward(response)
             self.update_node(response, {'reward': reward})
             self.total_reward += reward
             self.rewards.append(reward)
