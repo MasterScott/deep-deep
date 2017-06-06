@@ -138,7 +138,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     # Is spider allowed to follow out-of-domain links?
     # XXX: it is not enough to set this to False; a middleware should be also
-    # turned off.
+    # turned off via OFFSITE_ENABLED = False.
     stay_in_domain = True
 
     # use baseline algorithm (BFS) instead of Q-Learning

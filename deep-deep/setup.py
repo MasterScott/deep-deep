@@ -32,6 +32,9 @@ setup(
         'joblib',
         'numpy',
         'scrapy-cdr',
+        'json-lines >= 0.3.1',
+        'html-text >= 0.1.1',
+        'proxy-middleware >= 0.2.0',
         'formasaurus[with_deps]',  # fixme: remove it
     ],
 )

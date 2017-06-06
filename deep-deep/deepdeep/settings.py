@@ -89,8 +89,12 @@ CRAWLGRAPH_ENABLED = False
 # Enable or disable downloader middlewares
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
+   'proxy_middleware.ProxyOnlyTorMiddleware': 10,
    'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware': 543,
 }
+
+# Enable 'deepdeep.downloadermiddlewares.OffsiteDownloaderMiddleware'
+OFFSITE_ENABLED = True
 
 # Enable or disable extensions
 # See http://scrapy.readthedocs.org/en/latest/topics/extensions.html
