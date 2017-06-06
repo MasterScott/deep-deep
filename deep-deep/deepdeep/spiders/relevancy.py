@@ -27,7 +27,6 @@ class _RelevancySpider(QSpider, metaclass=abc.ABCMeta):
     }
 
     # overrides for default option values used in QSpider
-    stay_in_domain = False
     balancing_temperature = 0.1
     replay_sample_size = 50
     replay_maxsize = 100000  # decrease it to ~10K if use_pages is 1

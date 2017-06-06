@@ -136,11 +136,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     # Store only latest checkpoint to save disk space.
     checkpoint_latest = 0
 
-    # Is spider allowed to follow out-of-domain links?
-    # XXX: it is not enough to set this to False; a middleware should be also
-    # turned off via OFFSITE_ENABLED = False.
-    stay_in_domain = True
-
     # use baseline algorithm (BFS) instead of Q-Learning
     baseline = False
 
@@ -158,7 +153,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.use_page_urls = bool(int(self.use_page_urls))
         self.use_full_page_urls = bool(int(self.use_full_page_urls))
         self.double = int(self.double)
-        self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
         self.replay_maxsize = int(self.replay_maxsize)
@@ -336,7 +330,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         """ Return a list of all unique links on a page """
         return list(self.le.iter_link_dicts(
             response=response,
-            limit_by_domain=self.stay_in_domain,
+            limit_by_domain=not self.settings.getbool('OFFSITE_ENABLED'),
             deduplicate=False,
             deduplicate_local=True,
         ))
