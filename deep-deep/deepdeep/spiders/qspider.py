@@ -330,7 +330,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         """ Return a list of all unique links on a page """
         return list(self.le.iter_link_dicts(
             response=response,
-            limit_by_domain=not self.settings.getbool('OFFSITE_ENABLED'),
+            limit_by_domain=self.settings.getbool('OFFSITE_ENABLED'),
             deduplicate=False,
             deduplicate_local=True,
         ))
