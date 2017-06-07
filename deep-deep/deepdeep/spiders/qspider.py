@@ -6,6 +6,7 @@ import abc
 import time
 import gzip
 import logging
+from weakref import WeakKeyDictionary
 
 import psutil  # type: ignore
 import tqdm  # type: ignore
@@ -135,11 +136,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     # Store only latest checkpoint to save disk space.
     checkpoint_latest = 0
 
-    # Is spider allowed to follow out-of-domain links?
-    # XXX: it is not enough to set this to False; a middleware should be also
-    # turned off via OFFSITE_ENABLED = False.
-    stay_in_domain = True
-
     # use baseline algorithm (BFS) instead of Q-Learning
     baseline = False
 
@@ -157,7 +153,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.use_page_urls = bool(int(self.use_page_urls))
         self.use_full_page_urls = bool(int(self.use_full_page_urls))
         self.double = int(self.double)
-        self.stay_in_domain = bool(int(self.stay_in_domain))
         self.steps_before_switch = int(self.steps_before_switch)
         self.replay_sample_size = int(self.replay_sample_size)
         self.replay_maxsize = int(self.replay_maxsize)
@@ -199,6 +194,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         self.rewards = []  # type: List[float]
         self.steps_before_reschedule = 0
         self.goal = self.get_goal()
+        self._reward_cache = WeakKeyDictionary()  # type: WeakKeyDictionary
 
         self.crawled_domains = set()  # type: Set[str]
         self.relevant_domains = set()  # type: Set[str]
@@ -229,6 +225,12 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
     def get_goal(self) -> BaseGoal:
         """ This method should return a crawl goal object """
         pass
+
+    def get_reward(self, response: Response) -> float:
+        if response not in self._reward_cache:
+            score = self.goal.get_reward(response)
+            self._reward_cache[response] = score
+        return self._reward_cache[response]
 
     def is_seed(self, r: Union[scrapy.Request, Response]) -> bool:
         return 'link_vector' not in r.meta
@@ -316,7 +318,6 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
                 AS_t1=links_matrix,
                 r_t1=reward
             )
-            self.goal.response_observed(response)
         domain = get_domain(response.url)
         self.crawled_domains.add(domain)
         if reward > 0.5:
@@ -329,7 +330,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
         """ Return a list of all unique links on a page """
         return list(self.le.iter_link_dicts(
             response=response,
-            limit_by_domain=self.stay_in_domain,
+            limit_by_domain=self.settings.getbool('OFFSITE_ENABLED'),
             deduplicate=False,
             deduplicate_local=True,
         ))
