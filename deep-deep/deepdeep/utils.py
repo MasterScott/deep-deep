@@ -32,23 +32,7 @@ def dict_aggregate_max(*dicts):
 
 
 def get_domain(url: str) -> str:
-    """
-    >>> get_domain("http://foo.com")
-    'foo.com'
-    >>> get_domain("http://bar.FOO.com/path")
-    'foo.com'
-    >>> get_domain("http://foo.onion")
-    'foo.onion'
-    >>> get_domain("http://bar.foo.onion")
-    'foo.onion'
-    """
-    e = tldextract.extract(url)
-    if not e.suffix and e.domain == 'onion':
-        subdomain = e.subdomain.rsplit('.', 1)[-1]
-        domain = '{}.{}'.format(subdomain, e.domain)
-    else:
-        domain = e.registered_domain
-    return domain.lower()
+    return tldextract.extract(url).registered_domain.lower()
 
 
 def get_response_domain(response):
