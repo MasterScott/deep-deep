@@ -97,7 +97,7 @@ To run tests, execute the following command from the ``deep-deep`` folder::
 
     ./check.sh
 
-It requires Python 3.5+, pytest_, `pytest-cov`_ and `mypy`_.
+It requires Python 3.5+, pytest_, `pytest-cov`_, `pytest-twisted`_ and `mypy`_.
 
 Alternatively, run ``tox`` from ``deep-deep`` folder.
 
@@ -105,6 +105,7 @@ Alternatively, run ``tox`` from ``deep-deep`` folder.
 .. _eli5: http://eli5.readthedocs.io/
 .. _pytest: http://pytest.org/latest/
 .. _pytest-cov: https://pytest-cov.readthedocs.io/
+.. _pytest-twisted: https://github.com/schmir/pytest-twisted
 .. _mypy: http://mypy-lang.org/
 .. _TensorBoard: https://www.tensorflow.org/how_tos/summaries_and_tensorboard/
 .. _TensorFlow: https://www.tensorflow.org/
