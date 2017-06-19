@@ -8,6 +8,7 @@ from scrapy.http import TextResponse  # type: ignore
 from scrapy.linkextractors import IGNORED_EXTENSIONS  # type: ignore
 from scrapy.utils.response import get_base_url  # type: ignore
 from scrapy.utils.url import url_has_any_extension  # type: ignore
+from w3lib.html import strip_html5_whitespace  # type: ignore
 
 from deepdeep.utils import canonicalize_url, get_domain
 
@@ -85,7 +86,7 @@ def _extract_link_dicts(
         if 'href' not in attrs:
             continue
 
-        href = attrs['href']
+        href = strip_html5_whitespace(attrs['href'])
         if 'mailto:' in href:
             continue
 
