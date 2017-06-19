@@ -27,13 +27,14 @@ setup(
     ],
     install_requires=[
         'psutil',
-        'scrapy >= 1.1',
-        'scikit-learn >= 0.17.1',
+        'scrapy >= 1.3.2',
+        'w3lib >= 1.17.0',
+        'scikit-learn >= 0.18.1',
         'joblib',
         'numpy',
         'scrapy-cdr',
         'json-lines >= 0.3.1',
-        'html-text >= 0.1.1',
+        'html-text >= 0.2.1',
         'proxy-middleware >= 0.2.0',
         'formasaurus[with_deps]',  # fixme: remove it
     ],
