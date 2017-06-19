@@ -28,7 +28,7 @@ class BaseGoal(metaclass=abc.ABCMeta):
         """
         pass
 
-    def is_acheived_for(self, domain: str) -> bool:
+    def is_achieved_for(self, domain: str) -> bool:
         """
         This method should return True if a spider should stop
         processing the website.
@@ -107,7 +107,7 @@ class RelevancyGoal(BaseGoal):
             self.relevant_pages_found[domain] += 1
         return relevancy
 
-    def is_acheived_for(self, domain: str):
+    def is_achieved_for(self, domain: str):
         return (
             self._max_requests_reached(domain) or
             self._max_relevant_pages_reached(domain)
@@ -151,7 +151,7 @@ class FormasaurusGoal(BaseGoal):
         * "other"
 
     threshold : float
-         Probability threshold required to consider the goal acheived
+         Probability threshold required to consider the goal achieved
          for a domain (default: 0.7).
     """
     def __init__(self, formtype: str, threshold: float=0.7) -> None:
@@ -170,7 +170,7 @@ class FormasaurusGoal(BaseGoal):
         self._domain_scores.update(domain, score)
         return score
 
-    def is_acheived_for(self, domain: str) -> bool:
+    def is_achieved_for(self, domain: str) -> bool:
         score = self._domain_scores[domain]
         should_close = score > self.threshold
         if should_close:

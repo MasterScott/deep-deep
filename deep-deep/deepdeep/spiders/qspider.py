@@ -397,7 +397,7 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
 
     def close_finished_queues(self):
         for slot in self.scheduler.queue.get_active_slots():
-            if self.goal.is_acheived_for(domain=slot):
+            if self.goal.is_achieved_for(domain=slot):
                 self.scheduler.close_slot(slot)
 
     @log_time
