@@ -1,12 +1,18 @@
+import joblib
 from scrapy.crawler import CrawlerRunner
 from scrapy.settings import Settings
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
 from twisted.web.resource import Resource
 
 from deepdeep.predictor import LinkClassifier
 import deepdeep.settings
-from deepdeep.spiders.relevancy import KeywordRelevancySpider
+from deepdeep.spiders.relevancy import (
+    KeywordRelevancySpider, ClassifierRelevancySpider,
+)
 from .mockserver import MockServer
-from .utils import text_resource, find_item, inlineCallbacks
+from .utils import text_resource, inlineCallbacks
 
 
 def make_crawler(spider_cls, **extra_settings):
@@ -47,7 +53,31 @@ def test_keywords_crawler(tmpdir):
             seeds_url=str(seeds_path),
             steps_before_switch=2,
         )
-    assert crawler.stats.get_value('downloader/response_status_count/200') == 5
+    _check_crawl_results(crawler)
+
+
+@inlineCallbacks
+def test_classifier_crawler(tmpdir):
+    crawler = make_crawler(ClassifierRelevancySpider)
+    clf = make_pipeline(CountVectorizer(), LogisticRegression())
+    clf.fit(['good', 'awesome', 'bad'], [1, 1, 0])
+    clf_path = tmpdir.join('clf.joblib')
+    joblib.dump(clf, str(clf_path))
+    with MockServer(GoodBadSite) as s:
+        root_url = s.root_url
+        seeds_path = tmpdir.join('seeds.txt')
+        with seeds_path.open('wt') as f:
+            f.write('{}\n'.format(root_url))
+        yield crawler.crawl(
+            classifier_path=str(clf_path),
+            seeds_url=str(seeds_path),
+            steps_before_switch=2,
+        )
+    _check_crawl_results(crawler)
+
+
+def _check_crawl_results(crawler):
+    assert crawler.stats.get_value('item_scraped_count') == 4
     assert crawler.stats.get_value('finish_reason') == 'finished'
 
     spider = crawler.spider

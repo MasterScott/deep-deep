@@ -1,5 +1,3 @@
-from six.moves.urllib.parse import urlsplit, urlunsplit
-
 import pytest
 from scrapy.utils.log import configure_logging
 from scrapy.utils.python import to_bytes
@@ -24,13 +22,3 @@ def text_resource(content):
             request.setHeader(b'content-type', b'text/html')
             return to_bytes(content)
     return Page
-
-
-def find_item(path, items, key='url'):
-    item, = [item for item in items if get_path(item[key]) == path]
-    return item
-
-
-def get_path(url):
-    p = urlsplit(url)
-    return urlunsplit(['', '', p.path or '/', p.query, p.fragment])
