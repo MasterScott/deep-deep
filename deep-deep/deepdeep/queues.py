@@ -89,6 +89,7 @@ class RequestsPriorityQueue(Sized):
             if request is not self.REMOVED:
                 self._pop_empty()
                 return request
+        return None
 
     @classmethod
     def change_priority(cls,
@@ -157,7 +158,7 @@ class RequestsPriorityQueue(Sized):
         """ Pop random entry from a queue """
         self._pop_empty()
         if not self.entries:
-            return
+            return None
 
         # Because we've called _pop_empty it is guaranteed there is at least
         # one non-removed entry in a queue (the one at the top).
@@ -167,6 +168,7 @@ class RequestsPriorityQueue(Sized):
                 request = self.remove_entry(entry)
                 self._pop_empty()
                 return request
+        return None
 
     def max_priority(self) -> int:
         """ Return maximum request priority in this queue """
@@ -265,6 +267,7 @@ class BalancedPriorityQueue:
 
         if self._buffer:
             return self._buffer.pop()
+        return None
 
     @property
     def batch_size(self) -> int:
