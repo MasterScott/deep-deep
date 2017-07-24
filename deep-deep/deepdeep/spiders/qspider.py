@@ -564,6 +564,9 @@ class QSpider(BaseSpider, metaclass=abc.ABCMeta):
             'domains_closed': domains_closed,
             'enqueued': enqueued,
             'processed': dequeued,
+            'item_scraped_count': stats.get_value('item_scraped_count', 0),
+            'response_received_count':
+                stats.get_value('response_received_count', 0),
             'dropped': dropped,
             'todo': todo,
             'crawled_domains': crawled_domains,
