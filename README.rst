@@ -109,3 +109,9 @@ Alternatively, run ``tox`` from ``deep-deep`` folder.
 .. _mypy: http://mypy-lang.org/
 .. _TensorBoard: https://www.tensorflow.org/how_tos/summaries_and_tensorboard/
 .. _TensorFlow: https://www.tensorflow.org/
+
+----
+
+.. image:: https://hyperiongray.s3.amazonaws.com/define-hg.svg
+	:target: https://hyperiongray.com/?pk_campaign=github&pk_kwd=deep-deep
+	:alt: define hyperiongray
