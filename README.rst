@@ -113,5 +113,5 @@ Alternatively, run ``tox`` from ``deep-deep`` folder.
 ----
 
 .. image:: https://hyperiongray.s3.amazonaws.com/define-hg.svg
-	:target: https://hyperiongray.com/?pk_campaign=github&pk_kwd=deep-deep
+	:target: https://www.hyperiongray.com/?pk_campaign=github&pk_kwd=deep-deep
 	:alt: define hyperiongray
